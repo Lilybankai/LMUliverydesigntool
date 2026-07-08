@@ -53,10 +53,11 @@ export default function SignInConsentDialog({ open, onOpenChange }) {
             Cancel
           </Button>
           <Button
+            variant="gradient"
             size="sm"
             onClick={handleSignIn}
             disabled={!agreed || busy}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 font-rajdhani font-semibold tracking-wide gap-2"
+            className="font-rajdhani font-semibold tracking-wide gap-2 uppercase"
           >
             <LogIn className="w-4 h-4" />
             Sign in with Google

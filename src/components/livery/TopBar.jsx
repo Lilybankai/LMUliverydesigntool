@@ -21,11 +21,16 @@ export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseC
   return (
     <header className="flex items-center gap-3 px-4 h-14 bg-card border-b border-border flex-shrink-0">
       {/* Logo */}
-      <div data-tutorial="logo" className="flex items-center gap-2 mr-2">
-        <Layers className="w-5 h-5 text-primary" />
+      <div data-tutorial="logo" className="flex items-center gap-2.5 mr-2">
+        <div className="brand-gradient-bg clip-chamfer flex items-center justify-center w-8 h-8 shadow-[0_0_16px_-4px_hsl(var(--brand-purple)/0.8)]">
+          <Layers className="w-4.5 h-4.5 text-white" />
+        </div>
         <div className="flex flex-col">
-          <span className="font-geom text-lg tracking-wide text-foreground uppercase">LMU Livery Studio</span>
-          <span className="font-inter text-xs text-muted-foreground">by XILE GT Simracing</span>
+          <span className="font-geom text-lg tracking-wide uppercase leading-none">
+            <span className="text-foreground">LMU </span>
+            <span className="brand-gradient-text">Livery Studio</span>
+          </span>
+          <span className="brand-eyebrow text-muted-foreground mt-1">by XILE GT Simracing</span>
         </div>
       </div>
 
@@ -220,9 +225,10 @@ export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseC
       <Button
         data-tutorial="export"
         onClick={onExport}
+        variant="gradient"
         size="sm"
-        className="h-8 gap-2 bg-primary text-primary-foreground hover:bg-primary/90 font-rajdhani font-600 tracking-wide">
-        
+        className="h-8 gap-2 font-rajdhani font-semibold tracking-wide uppercase">
+
         <Download className="w-4 h-4" />
         Export 4K TGA
       </Button>

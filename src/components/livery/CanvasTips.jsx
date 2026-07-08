@@ -21,7 +21,7 @@ export default function CanvasTips() {
         className="w-full flex items-center justify-between px-2 py-1.5 text-[11px] font-rajdhani font-600 uppercase tracking-wider text-foreground/90 hover:bg-secondary/50 transition-colors"
       >
         <span className="flex items-center gap-1.5">
-          <Lightbulb className="w-3 h-3 text-primary" />
+          <Lightbulb className="w-3 h-3 text-accent" />
           Canvas Tips
         </span>
         {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -30,7 +30,7 @@ export default function CanvasTips() {
         <ul className="flex flex-col gap-1 px-2 pb-2 pt-1 border-t border-border">
           {TIPS.map((t) => (
             <li key={t.k} className="flex flex-col leading-tight">
-              <span className="text-[10px] font-mono text-primary">{t.k}</span>
+              <span className="text-[10px] font-mono-brand text-accent">{t.k}</span>
               <span className="text-[10px] text-muted-foreground">{t.v}</span>
             </li>
           ))}

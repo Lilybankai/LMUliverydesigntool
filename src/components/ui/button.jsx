@@ -11,10 +11,12 @@ const buttonVariants = cva(
       variant: {
         default:
           "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+        gradient:
+          "brand-gradient-bg clip-chamfer text-white font-semibold shadow-[0_0_20px_-6px_hsl(var(--brand-purple)/0.7)] hover:shadow-[0_0_24px_-4px_hsl(var(--brand-magenta)/0.8)] transition-shadow",
         destructive:
           "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
         outline:
-          "border border-input bg-transparent shadow-sm hover:bg-accent hover:text-accent-foreground",
+          "border border-input bg-transparent shadow-sm hover:border-accent hover:text-accent hover:bg-accent/10",
         secondary:
           "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",

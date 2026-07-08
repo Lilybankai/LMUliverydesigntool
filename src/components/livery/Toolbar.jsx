@@ -3,6 +3,7 @@ import { SHAPE_TYPES, SHAPE_GROUPS } from '@/lib/shapes';
 import { Button } from '@/components/ui/button';
 import { Type } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 export default function Toolbar({ onAddShape, onAddText, openGroup: openGroupProp, onOpenGroupChange }) {
   const [openGroupState, setOpenGroupState] = useState(null);
@@ -28,7 +29,10 @@ export default function Toolbar({ onAddShape, onAddText, openGroup: openGroupPro
           return (
             <div key={group.id} data-tutorial-group={group.id} className="flex flex-col">
               <button
-                className="flex items-center justify-between px-2 py-1.5 text-xs font-bold uppercase tracking-widest font-rajdhani text-foreground/80 hover:text-foreground transition-colors"
+                className={cn(
+                  "flex items-center justify-between px-2 py-1.5 text-xs font-bold uppercase tracking-widest font-rajdhani transition-colors",
+                  isOpen ? "text-accent" : "text-foreground/80 hover:text-accent"
+                )}
                 onClick={() => setOpenGroup(isOpen ? null : group.id)}
               >
                 <span>{group.label}</span>

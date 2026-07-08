@@ -7,7 +7,7 @@ export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisib
 
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-xs text-foreground/80 uppercase tracking-widest px-1 pb-1 font-rajdhani font-bold">Layers</p>
+      <p className="text-xs text-accent uppercase tracking-widest px-1 pb-1 font-rajdhani font-bold">Layers</p>
       {reversedLayers.length === 0 && (
         <p className="text-xs text-muted-foreground px-1 py-4 text-center">No layers yet.<br />Add a shape to begin.</p>
       )}
