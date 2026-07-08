@@ -13,6 +13,7 @@ export const supabase = supabaseUrl && supabaseKey
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        flowType: 'pkce',
       },
     })
   : null;
@@ -183,11 +184,14 @@ export const db = {
       if (redirectTo) window.location.href = redirectTo;
     },
 
-    async redirectToLogin(redirectTo = window.location.href) {
+    async redirectToLogin(redirectTo) {
       const client = requireSupabase();
+      // Always return to a clean, allowlisted URL — never echo back any
+      // ?error/#access_token junk left in the address bar from a prior attempt.
+      const target = redirectTo || `${window.location.origin}${window.location.pathname}`;
       const { error } = await client.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo },
+        options: { redirectTo: target },
       });
       if (error) throw error;
     },

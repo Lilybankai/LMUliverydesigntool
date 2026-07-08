@@ -159,8 +159,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const navigateToLogin = () => {
-    // Use the SDK's redirectToLogin method
-    db.auth.redirectToLogin(window.location.href);
+    // Let redirectToLogin resolve a clean, allowlisted return URL.
+    db.auth.redirectToLogin();
   };
 
   return (
