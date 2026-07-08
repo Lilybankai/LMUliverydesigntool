@@ -1,6 +1,6 @@
 # LMU Livery Design Tool
 
-React/Vite livery design tool exported from Base44.
+React/Vite livery design tool for Le Mans Ultimate.
 
 ## Local Development
 
@@ -17,6 +17,16 @@ npm run typecheck
 npm run build
 ```
 
+## Supabase Setup
+
+Run [supabase-schema.sql](supabase-schema.sql) in the Supabase SQL Editor before enabling saves/login in production.
+
+Supabase Auth notes:
+
+- Enable the Google provider in Supabase Auth if you want the existing "Sign in with Google" button to work.
+- Add your local and production URLs to Supabase Auth redirect URLs.
+- The current checkout/paywall flow is not connected to a payment provider yet.
+
 ## Coolify Deployment
 
 Use Coolify's static site or Nixpacks flow for this repository.
@@ -26,12 +36,9 @@ Use Coolify's static site or Nixpacks flow for this repository.
 - Publish directory: `dist`
 - Node version: 20 or newer
 
-Optional Base44 environment variables:
+Required environment variables:
 
 ```env
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=https://your-base44-backend.example
-VITE_BASE44_FUNCTIONS_VERSION=prod
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_your_key
 ```
-
-Without those variables, the app builds and runs in standalone mode, but Base44-backed login, saved designs, subscriptions, uploads, and functions are unavailable.
