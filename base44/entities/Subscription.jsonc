@@ -1,0 +1,66 @@
+{
+  "name": "Subscription",
+  "type": "object",
+  "properties": {
+    "user_email": {
+      "type": "string",
+      "description": "Authoritative email from the logged-in user at checkout creation. Never overwritten by webhook."
+    },
+    "checkout_id": {
+      "type": "string",
+      "description": "Wix checkout session id \u2014 used to match the order_approved webhook."
+    },
+    "subscription_id": {
+      "type": "string",
+      "description": "Wix subscription id (order.lineItems[].subscriptionInfo.id) \u2014 set on order_approved."
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "active",
+        "canceled",
+        "expired"
+      ],
+      "default": "pending",
+      "description": "Local subscription status."
+    },
+    "buyer_email": {
+      "type": "string",
+      "description": "Email the buyer typed on the Wix checkout page (may differ from user_email)."
+    },
+    "activated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ended_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "user_email",
+    "checkout_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "created_by_id": {
+            "$eq": "{{user.id}}"
+          }
+        }
+      ]
+    },
+    "write": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

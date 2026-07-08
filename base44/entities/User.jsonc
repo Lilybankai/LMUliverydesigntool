@@ -1,0 +1,21 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "marketing_opt_in": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the user has opted in to marketing emails."
+    },
+    "marketing_opt_in_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the user opted in to marketing."
+    },
+    "free_export_used": {
+      "type": "boolean",
+      "default": false,
+      "description": "True once the user has used their one free livery export."
+    }
+  }
+}

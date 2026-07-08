@@ -1,0 +1,39 @@
+{
+  "name": "SavedDesign",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "User-given name for this design"
+    },
+    "vehicleId": {
+      "type": "string",
+      "description": "ID of the vehicle the design was created for"
+    },
+    "baseColour": {
+      "type": "string",
+      "description": "Selected base colour key or 'custom'"
+    },
+    "customColour": {
+      "type": "string",
+      "description": "Custom hex colour if baseColour is 'custom'"
+    },
+    "baseOpacity": {
+      "type": "number",
+      "description": "Base layer opacity 0-1"
+    },
+    "layers": {
+      "type": "array",
+      "description": "Serialized layer objects (without runtime-only fields)",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "name",
+    "vehicleId",
+    "layers"
+  ]
+}
