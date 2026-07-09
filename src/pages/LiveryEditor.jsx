@@ -33,7 +33,6 @@ import ImageImport from '@/components/livery/ImageImport';
 import ExportAdDialog from '@/components/livery/ExportAdDialog';
 import InteractiveTutorial from '@/components/livery/InteractiveTutorial';
 import MobileWarningDialog from '@/components/livery/MobileWarningDialog';
-import SignInConsentDialog from '@/components/livery/SignInConsentDialog';
 import SaveDesignDialog from '@/components/livery/SaveDesignDialog';
 import MyDesignsDialog from '@/components/livery/MyDesignsDialog';
 import PaywallDialog from '@/components/livery/PaywallDialog';
@@ -44,6 +43,10 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
+
+// Paywall is disabled for now (login is required up front, downloads are free).
+// Flip to true to re-enable the free-export limit + subscription gate.
+const PAYWALL_ENABLED = false;
 
 export default function LiveryEditor() {
   const [vehicleId, setVehicleId] = useState(VEHICLES[0].id);
@@ -91,7 +94,6 @@ export default function LiveryEditor() {
   // Save/Load state
   const { isAuthenticated, user, checkUserAuth, logout } = useAuth();
   const { toast } = useToast();
-  const [signInOpen, setSignInOpen] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
   const [myDesignsOpen, setMyDesignsOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
@@ -110,24 +112,6 @@ export default function LiveryEditor() {
       .catch(() => { if (!cancelled) setHasActiveSub(false); });
     return () => { cancelled = true; };
   }, [isAuthenticated, user?.email]);
-
-  // After redirect-back from Google sign-in, finalize the marketing opt-in.
-  useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    const pending = (() => { try { return localStorage.getItem('lmu_pending_marketing_optin'); } catch { return null; } })();
-    if (pending === '1' && !user.marketing_opt_in) {
-      db.auth.updateMe({
-        marketing_opt_in: true,
-        marketing_opt_in_date: new Date().toISOString(),
-      }).then(() => {
-        try { localStorage.removeItem('lmu_pending_marketing_optin'); } catch (e) { /* ignore */ }
-        checkUserAuth();
-        setSaveOpen(true); // Continue the save flow they initiated
-      });
-    } else if (pending === '1') {
-      try { localStorage.removeItem('lmu_pending_marketing_optin'); } catch (e) { /* ignore */ }
-    }
-  }, [isAuthenticated, user, checkUserAuth]);
 
   const stickersImgRef = useRef(null);
 
@@ -300,29 +284,10 @@ export default function LiveryEditor() {
     return arr.map(({ _imgElement, ...rest }) => rest);
   }, []);
 
-  const requestSaveDesign = useCallback(() => {
-    if (!isAuthenticated || !user) {
-      setSignInOpen(true);
-      return;
-    }
-    if (!user.marketing_opt_in) {
-      setSignInOpen(true);
-      return;
-    }
-    setSaveOpen(true);
-  }, [isAuthenticated, user]);
+  // Login is required to reach the tool, so these are always available.
+  const requestSaveDesign = useCallback(() => setSaveOpen(true), []);
 
-  const requestMyDesigns = useCallback(() => {
-    if (!isAuthenticated || !user) {
-      setSignInOpen(true);
-      return;
-    }
-    if (!user.marketing_opt_in) {
-      setSignInOpen(true);
-      return;
-    }
-    setMyDesignsOpen(true);
-  }, [isAuthenticated, user]);
+  const requestMyDesigns = useCallback(() => setMyDesignsOpen(true), []);
 
   const handleSaveDesign = useCallback(async (name) => {
     await db.entities.SavedDesign.create({
@@ -403,7 +368,7 @@ export default function LiveryEditor() {
       },
     });
     // Gate: active subscribers and trial-window users pass. Otherwise honor the free export.
-    if (!hasActiveSub && !isInFreeTrial() && hasUsedFreeExport()) {
+    if (PAYWALL_ENABLED && !hasActiveSub && !isInFreeTrial() && hasUsedFreeExport()) {
       setPaywallOpen(true);
       return;
     }
@@ -424,7 +389,7 @@ export default function LiveryEditor() {
     });
     exportCanvasAsTga(renderOffscreen(), 'customskin.tga');
     // Only consume the "free export" if the user is NOT a subscriber AND not in their trial window.
-    if (!hasActiveSub && !isInFreeTrial()) markFreeExportUsed();
+    if (PAYWALL_ENABLED && !hasActiveSub && !isInFreeTrial()) markFreeExportUsed();
   }, [renderOffscreen, vehicleId, vehicle.name, layers.length, resolvedBase, hasActiveSub, isInFreeTrial, markFreeExportUsed]);
 
   return (
@@ -604,7 +569,6 @@ export default function LiveryEditor() {
       </div>
 
       <MobileWarningDialog />
-      <SignInConsentDialog open={signInOpen} onOpenChange={setSignInOpen} />
       <SaveDesignDialog open={saveOpen} onOpenChange={setSaveOpen} onSave={handleSaveDesign} />
       <MyDesignsDialog open={myDesignsOpen} onOpenChange={setMyDesignsOpen} onLoad={handleLoadDesign} />
       <ExportAdDialog open={adOpen} onOpenChange={setAdOpen} ad={currentAd} onDownload={handleDownload} />

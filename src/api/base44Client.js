@@ -195,6 +195,28 @@ export const db = {
       });
       if (error) throw error;
     },
+
+    async signInWithPassword(email, password) {
+      const client = requireSupabase();
+      const { data, error } = await client.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return data;
+    },
+
+    async signUp(email, password) {
+      const client = requireSupabase();
+      const { data, error } = await client.auth.signUp({ email, password });
+      if (error) throw error;
+      // data.session is null when email confirmation is required.
+      return data;
+    },
+
+    // Subscribe to Supabase auth changes. Returns an unsubscribe function.
+    onAuthStateChange(callback) {
+      if (!supabase) return () => {};
+      const { data } = supabase.auth.onAuthStateChange((event, session) => callback(event, session));
+      return () => data?.subscription?.unsubscribe();
+    },
   },
 
   entities: {
