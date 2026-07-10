@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FolderOpen, Copy, CheckCheck, ChevronDown, ChevronUp } from 'lucide-react';
+import { FolderOpen, Copy, CheckCheck, ChevronDown, ChevronUp, Zap } from 'lucide-react';
 
 const INSTALL_PATH = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\UserData\\Liveries';
 
@@ -33,7 +33,38 @@ export default function InstallGuide() {
 
       {open && (
         <div className="px-3 pb-3 flex flex-col gap-2.5 border-t border-border">
-          <ol className="flex flex-col gap-1.5 mt-2">
+          {/* Auto Installer — recommended */}
+          <div className="flex items-center gap-1.5 mt-2">
+            <Zap className="w-3 h-3 text-primary flex-shrink-0" />
+            <span className="text-[10px] font-rajdhani font-semibold uppercase tracking-widest text-primary">
+              Auto Installer (Recommended)
+            </span>
+          </div>
+          <p className="text-[10px] text-muted-foreground/70 leading-snug -mt-1">
+            No file juggling — the Auto Installer watches your Downloads folder and drops new liveries straight into the game for you.
+          </p>
+          <ol className="flex flex-col gap-1.5">
+            {[
+              'Download and run the LMU Livery Auto Installer once — it stays running in the background',
+              'Export the TGA using the button above',
+              'The installer detects the download and copies it into your LMU game files automatically',
+              'Launch LMU — your livery is already there',
+            ].map((step, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="text-[10px] font-mono text-primary mt-0.5 flex-shrink-0">{i + 1}.</span>
+                <span className="text-[11px] text-muted-foreground leading-snug">{step}</span>
+              </li>
+            ))}
+          </ol>
+
+          {/* Manual fallback */}
+          <div className="flex items-center gap-1.5 mt-1.5 pt-2.5 border-t border-border/60">
+            <FolderOpen className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+            <span className="text-[10px] font-rajdhani font-semibold uppercase tracking-widest text-muted-foreground">
+              Manual Install (No Auto Installer)
+            </span>
+          </div>
+          <ol className="flex flex-col gap-1.5">
             {[
               'Export the TGA using the button above',
               'Open the folder below in Windows Explorer',
