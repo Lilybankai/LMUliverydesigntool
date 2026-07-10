@@ -149,6 +149,91 @@ const subscriptionEntity = {
   },
 };
 
+const mapSuggestion = (row) => ({
+  id: row.id,
+  email: row.email,
+  category: row.category,
+  title: row.title,
+  body: row.body,
+  status: row.status,
+  admin_notes: row.admin_notes,
+  created_date: row.created_at,
+  updated_date: row.updated_at,
+});
+
+const suggestionEntity = {
+  async create(payload) {
+    const client = requireSupabase();
+    const user = await getCurrentUser();
+    const { data, error } = await client
+      .from('suggestions')
+      .insert({
+        user_id: user.id,
+        email: user.email,
+        category: payload.category || 'feature',
+        title: payload.title,
+        body: payload.body || null,
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapSuggestion(data);
+  },
+
+  async list(sort = '-created_date', limit) {
+    const client = requireSupabase();
+    const { column, ascending } = sortToColumn(sort, 'created_at');
+    let query = client.from('suggestions').select('*').order(column, { ascending });
+    if (limit) query = query.limit(limit);
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data || []).map(mapSuggestion);
+  },
+
+  async update(id, updates) {
+    const client = requireSupabase();
+    const patch = {};
+    if (updates.status !== undefined) patch.status = updates.status;
+    if (updates.admin_notes !== undefined) patch.admin_notes = updates.admin_notes;
+    const { data, error } = await client
+      .from('suggestions')
+      .update(patch)
+      .eq('id', id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapSuggestion(data);
+  },
+};
+
+// Admin-only aggregate reads for the dashboard. Every query is protected by
+// row-level security (public.is_admin()) — a non-admin caller just gets nothing.
+const adminApi = {
+  // Fetch the raw timestamps needed to compute every dashboard metric for a
+  // given window. Pass sinceISO = null for "all time".
+  async fetchActivity(sinceISO) {
+    const client = requireSupabase();
+    const build = (table, cols) => {
+      let q = client.from(table).select(cols);
+      if (sinceISO) q = q.gte('created_at', sinceISO);
+      return q;
+    };
+    const [profiles, designs, events] = await Promise.all([
+      build('profiles', 'created_at'),
+      build('saved_designs', 'created_at'),
+      build('analytics_events', 'created_at, event_name'),
+    ]);
+    if (profiles.error) throw profiles.error;
+    if (designs.error) throw designs.error;
+    if (events.error) throw events.error;
+    return {
+      signups: profiles.data || [],
+      saves: designs.data || [],
+      events: events.data || [],
+    };
+  },
+};
+
 export const db = {
   auth: {
     async isAuthenticated() {
@@ -222,7 +307,10 @@ export const db = {
   entities: {
     SavedDesign: savedDesignEntity,
     Subscription: subscriptionEntity,
+    Suggestion: suggestionEntity,
   },
+
+  admin: adminApi,
 
   functions: {
     async invoke() {
@@ -243,7 +331,23 @@ export const db = {
   },
 
   analytics: {
-    track() {},
+    // Fire-and-forget event logging into public.analytics_events.
+    // Never throws — analytics must never break the app.
+    track({ eventName, properties } = {}) {
+      if (!supabase || !eventName) return;
+      (async () => {
+        try {
+          const { data } = await supabase.auth.getUser();
+          await supabase.from('analytics_events').insert({
+            user_id: data?.user?.id ?? null,
+            event_name: eventName,
+            properties: properties || {},
+          });
+        } catch {
+          /* non-fatal */
+        }
+      })();
+    },
   },
 };
 

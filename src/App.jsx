@@ -1,17 +1,35 @@
+import { useEffect, useRef } from 'react';
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { isAdminEmail } from '@/lib/admin';
+import { base44 as db } from '@/api/base44Client';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoginGate from '@/components/livery/LoginGate';
 // Add page imports here
 import LiveryEditor from './pages/LiveryEditor';
 import ThankYou from './pages/ThankYou';
+import AdminDashboard from './pages/AdminDashboard';
+
+const AdminRoute = () => {
+  const { user } = useAuth();
+  return isAdminEmail(user?.email) ? <AdminDashboard /> : <PageNotFound />;
+};
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isAuthenticated, authError } = useAuth();
+
+  // Log a single page_view per app load once the user is authenticated.
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (isAuthenticated && !trackedRef.current) {
+      trackedRef.current = true;
+      db.analytics.track({ eventName: 'page_view', properties: { path: window.location.pathname } });
+    }
+  }, [isAuthenticated]);
 
   // Show loading spinner while checking the session.
   if (isLoadingAuth) {
@@ -36,6 +54,7 @@ const AuthenticatedApp = () => {
     <Routes>
       <Route path="/" element={<LiveryEditor />} />
       <Route path="/ThankYou" element={<ThankYou />} />
+      <Route path="/admin" element={<AdminRoute />} />
       {/* Add your page Route elements here */}
       <Route path="*" element={<PageNotFound />} />
     </Routes>

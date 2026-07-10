@@ -36,6 +36,8 @@ import MobileWarningDialog from '@/components/livery/MobileWarningDialog';
 import SaveDesignDialog from '@/components/livery/SaveDesignDialog';
 import MyDesignsDialog from '@/components/livery/MyDesignsDialog';
 import PaywallDialog from '@/components/livery/PaywallDialog';
+import SuggestionDialog from '@/components/livery/SuggestionDialog';
+import { isAdminEmail } from '@/lib/admin';
 import useHistory from '@/hooks/useHistory';
 
 import { Switch } from '@/components/ui/switch';
@@ -97,6 +99,7 @@ export default function LiveryEditor() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [myDesignsOpen, setMyDesignsOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [hasActiveSub, setHasActiveSub] = useState(false);
 
   // Check subscription status for logged-in users.
@@ -298,8 +301,12 @@ export default function LiveryEditor() {
       baseOpacity,
       layers: serializeLayers(layers),
     });
+    db.analytics.track({
+      eventName: 'livery_saved',
+      properties: { vehicle_id: vehicleId, vehicle_name: vehicle.name, layer_count: layers.length },
+    });
     toast({ title: 'Design saved', description: `"${name}" was saved to your designs.` });
-  }, [vehicleId, baseColour, customColour, baseOpacity, layers, serializeLayers, toast]);
+  }, [vehicleId, vehicle.name, baseColour, customColour, baseOpacity, layers, serializeLayers, toast]);
 
   const handleLoadDesign = useCallback(async (design) => {
     setVehicleId(design.vehicleId);
@@ -409,6 +416,8 @@ export default function LiveryEditor() {
         canRedo={canRedo}
         onSaveDesign={requestSaveDesign}
         onOpenMyDesigns={requestMyDesigns}
+        onOpenSuggestions={() => setSuggestOpen(true)}
+        isAdmin={isAdminEmail(user?.email)}
         isAuthenticated={isAuthenticated}
         user={user}
         onLogout={() => logout(true)}
@@ -573,6 +582,7 @@ export default function LiveryEditor() {
       <MyDesignsDialog open={myDesignsOpen} onOpenChange={setMyDesignsOpen} onLoad={handleLoadDesign} />
       <ExportAdDialog open={adOpen} onOpenChange={setAdOpen} ad={currentAd} onDownload={handleDownload} />
       <PaywallDialog open={paywallOpen} onOpenChange={setPaywallOpen} />
+      <SuggestionDialog open={suggestOpen} onOpenChange={setSuggestOpen} />
       <InteractiveTutorial
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}

@@ -1,13 +1,14 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Download, Layers, FolderOpen, Copy, CheckCheck, ChevronDown, Undo2, Redo2, Save, LogOut, User as UserIcon } from 'lucide-react';
+import { Download, Layers, FolderOpen, Copy, CheckCheck, ChevronDown, Undo2, Redo2, Save, LogOut, User as UserIcon, Lightbulb, LayoutDashboard } from 'lucide-react';
 import { VEHICLES, BASE_COLOURS } from '@/lib/vehicles';
 import { TutorialButton } from './InteractiveTutorial';
 
 const INSTALL_PATH = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\UserData\\Liveries';
 
-export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseColourChange, customColour, onCustomColourChange, onExport, onStartTutorial, onUndo, onRedo, canUndo, canRedo, onSaveDesign, onOpenMyDesigns, isAuthenticated, user, onLogout }) {
+export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseColourChange, customColour, onCustomColourChange, onExport, onStartTutorial, onUndo, onRedo, canUndo, canRedo, onSaveDesign, onOpenMyDesigns, onOpenSuggestions, isAdmin, isAuthenticated, user, onLogout }) {
   const [installOpen, setInstallOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [designsOpen, setDesignsOpen] = useState(false);
@@ -157,6 +158,16 @@ export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseC
               <FolderOpen className="w-3.5 h-3.5 text-primary" />
               My Designs
             </button>
+            {isAdmin && (
+              <Link
+                to="/admin"
+                onClick={() => setDesignsOpen(false)}
+                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded hover:bg-secondary text-xs text-foreground"
+              >
+                <LayoutDashboard className="w-3.5 h-3.5 text-primary" />
+                Admin Dashboard
+              </Link>
+            )}
             {isAuthenticated && (
               <button
                 onClick={() => { setDesignsOpen(false); onLogout(); }}
@@ -220,6 +231,18 @@ export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseC
           </div>
         )}
       </div>
+
+      {/* Feedback / Suggest */}
+      <Button
+        onClick={onOpenSuggestions}
+        variant="outline"
+        size="sm"
+        className="h-8 gap-2 text-xs"
+        title="Suggest a feature or report a bug"
+      >
+        <Lightbulb className="w-4 h-4 text-primary" />
+        Feedback
+      </Button>
 
       {/* Export */}
       <Button
