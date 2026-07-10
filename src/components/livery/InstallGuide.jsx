@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { FolderOpen, Copy, CheckCheck, ChevronDown, ChevronUp, Zap } from 'lucide-react';
+import { FolderOpen, Copy, CheckCheck, ChevronDown, ChevronUp, Zap, Download } from 'lucide-react';
 
 const INSTALL_PATH = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\UserData\\Liveries';
+const AUTO_INSTALLER_URL = 'https://github.com/Lilybankai/Apexandchillwebsite/releases/download/livery-installer-v0.1.0/LMU.Livery.Installer.Setup.0.1.0.exe';
 
 export default function InstallGuide() {
   const [copied, setCopied] = useState(false);
@@ -43,9 +44,19 @@ export default function InstallGuide() {
           <p className="text-[10px] text-muted-foreground/70 leading-snug -mt-1">
             No file juggling — the Auto Installer watches your Downloads folder and drops new liveries straight into the game for you.
           </p>
+          <a
+            href={AUTO_INSTALLER_URL}
+            className="flex items-center justify-center gap-1.5 bg-primary/10 hover:bg-primary/20 border border-primary/40 text-primary rounded px-2 py-1.5 transition-colors"
+            download
+          >
+            <Download className="w-3.5 h-3.5 flex-shrink-0" />
+            <span className="text-[11px] font-rajdhani font-semibold uppercase tracking-widest">
+              Download Auto Installer
+            </span>
+          </a>
           <ol className="flex flex-col gap-1.5">
             {[
-              'Download and run the LMU Livery Auto Installer once — it stays running in the background',
+              'Run the downloaded Auto Installer once — it stays running in the background',
               'Export the TGA using the button above',
               'The installer detects the download and copies it into your LMU game files automatically',
               'Launch LMU — your livery is already there',
