@@ -9,6 +9,7 @@ import {
 } from 'date-fns';
 import {
   Users, Layers, Download, Eye, Lightbulb, RefreshCw, ArrowLeft, MessageSquare,
+  ChevronRight, Car,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -105,6 +106,7 @@ export default function AdminDashboard() {
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [expandedUser, setExpandedUser] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -139,6 +141,40 @@ export default function AdminDashboard() {
     () => (activity ? buildSeries(activity, rangeKey) : []),
     [activity, rangeKey]
   );
+
+  // Aggregate download events per user, with a per-vehicle breakdown, sorted
+  // from most downloads to least. Downloads made while signed out (user_id null)
+  // are grouped together as "Anonymous".
+  const userDownloads = useMemo(() => {
+    if (!activity) return [];
+    const emailById = new Map((activity.signups || []).map((p) => [p.id, p.email]));
+    const byUser = new Map();
+    for (const e of activity.events) {
+      if (e.event_name !== 'livery_downloaded') continue;
+      const uid = e.user_id || 'anon';
+      let entry = byUser.get(uid);
+      if (!entry) {
+        entry = {
+          userId: uid,
+          email: uid === 'anon' ? null : (emailById.get(uid) || null),
+          total: 0,
+          cars: new Map(),
+        };
+        byUser.set(uid, entry);
+      }
+      entry.total += 1;
+      const car = e.properties?.vehicle_name || e.properties?.vehicle_id || 'Unknown';
+      entry.cars.set(car, (entry.cars.get(car) || 0) + 1);
+    }
+    return [...byUser.values()]
+      .map((u) => ({
+        ...u,
+        cars: [...u.cars.entries()]
+          .map(([name, count]) => ({ name, count }))
+          .sort((a, b) => b.count - a.count),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [activity]);
 
   const updateSuggestion = async (id, patch) => {
     const prev = suggestions;
@@ -187,6 +223,7 @@ export default function AdminDashboard() {
         <Tabs defaultValue="overview">
           <TabsList className="mb-6">
             <TabsTrigger value="overview" className="gap-2"><Eye className="w-4 h-4" /> Overview</TabsTrigger>
+            <TabsTrigger value="users" className="gap-2"><Users className="w-4 h-4" /> Users</TabsTrigger>
             <TabsTrigger value="suggestions" className="gap-2">
               <Lightbulb className="w-4 h-4" /> Suggestions
               {newCount > 0 && (
@@ -234,6 +271,70 @@ export default function AdminDashboard() {
                 </ResponsiveContainer>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="users">
+            {loading ? (
+              <div className="bg-card border border-border rounded-lg p-10 text-center text-muted-foreground text-sm">
+                Loading…
+              </div>
+            ) : userDownloads.length === 0 ? (
+              <div className="bg-card border border-border rounded-lg p-10 text-center text-muted-foreground">
+                <Download className="w-8 h-8 mx-auto mb-3 opacity-50" />
+                <p className="text-sm">No downloads in this period.</p>
+              </div>
+            ) : (
+              <div className="bg-card border border-border rounded-lg overflow-hidden">
+                <div className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 px-4 py-2.5 border-b border-border text-[11px] uppercase tracking-wider text-muted-foreground font-rajdhani">
+                  <span className="text-center">#</span>
+                  <span>User</span>
+                  <span className="text-right">Downloads</span>
+                </div>
+                {userDownloads.map((u, i) => {
+                  const expanded = expandedUser === u.userId;
+                  return (
+                    <div key={u.userId} className="border-b border-border last:border-b-0">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedUser(expanded ? null : u.userId)}
+                        className="w-full grid grid-cols-[2rem_1fr_auto] items-center gap-3 px-4 py-3 text-left hover:bg-secondary/40 transition-colors"
+                      >
+                        <span className="text-center text-xs text-muted-foreground tabular-nums">{i + 1}</span>
+                        <span className="flex items-center gap-2 min-w-0">
+                          <ChevronRight
+                            className={`w-4 h-4 flex-shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`}
+                          />
+                          <span className="truncate text-sm text-foreground">
+                            {u.email || (u.userId === 'anon' ? 'Anonymous (signed out)' : 'Unknown user')}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground/70 flex-shrink-0">
+                            {u.cars.length} {u.cars.length === 1 ? 'car' : 'cars'}
+                          </span>
+                        </span>
+                        <span className="text-right text-sm font-geom tabular-nums text-foreground">
+                          {u.total.toLocaleString()}
+                        </span>
+                      </button>
+                      {expanded && (
+                        <div className="px-4 pb-3 pl-12 flex flex-col gap-1.5">
+                          {u.cars.map((c) => (
+                            <div key={c.name} className="flex items-center justify-between gap-3 text-xs">
+                              <span className="flex items-center gap-2 text-muted-foreground min-w-0">
+                                <Car className="w-3.5 h-3.5 flex-shrink-0 text-primary" />
+                                <span className="truncate text-foreground">{c.name}</span>
+                              </span>
+                              <span className="tabular-nums text-muted-foreground flex-shrink-0">
+                                {c.count.toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="suggestions">
