@@ -219,9 +219,9 @@ const adminApi = {
       return q;
     };
     const [profiles, designs, events] = await Promise.all([
-      build('profiles', 'created_at'),
+      build('profiles', 'id, email, created_at'),
       build('saved_designs', 'created_at'),
-      build('analytics_events', 'created_at, event_name'),
+      build('analytics_events', 'user_id, created_at, event_name, properties'),
     ]);
     if (profiles.error) throw profiles.error;
     if (designs.error) throw designs.error;
