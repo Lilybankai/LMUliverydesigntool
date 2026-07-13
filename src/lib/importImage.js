@@ -51,8 +51,16 @@ export function loadImageFile(file, onReady) {
     return;
   }
 
-  const url = URL.createObjectURL(file);
-  const img = new Image();
-  img.onload = () => onReady(url, img.naturalWidth, img.naturalHeight, img);
-  img.src = url;
+  // Use a data: URL (not a blob: object URL) so the image bytes are embedded in
+  // the layer and survive being saved to the database and reloaded in a later
+  // session. Blob URLs are only valid for the lifetime of the current document,
+  // so a saved design would come back with a dead image reference.
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    const img = new Image();
+    img.onload = () => onReady(dataUrl, img.naturalWidth, img.naturalHeight, img);
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
 }

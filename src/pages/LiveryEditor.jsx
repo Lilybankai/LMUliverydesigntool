@@ -308,15 +308,31 @@ export default function LiveryEditor() {
     toast({ title: 'Design saved', description: `"${name}" was saved to your designs.` });
   }, [vehicleId, vehicle.name, baseColour, customColour, baseOpacity, layers, serializeLayers, toast]);
 
+  // Image layers are saved with their imageUrl but not the live HTMLImageElement
+  // (_imgElement is stripped before saving). Rebuild that element from the URL so
+  // drawShape has something to draw — otherwise loaded images render as blank.
+  const rehydrateImageLayers = useCallback((arr) => Promise.all(
+    (arr || []).map((layer) => {
+      if (layer.type !== 'image' || !layer.imageUrl) return layer;
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve({ ...layer, _imgElement: img });
+        img.onerror = () => resolve(layer); // dead URL (e.g. old blob:) — keep layer, just no image
+        img.src = layer.imageUrl;
+      });
+    })
+  ), []);
+
   const handleLoadDesign = useCallback(async (design) => {
     setVehicleId(design.vehicleId);
     if (design.baseColour) setBaseColour(design.baseColour);
     if (design.customColour) setCustomColour(design.customColour);
     if (typeof design.baseOpacity === 'number') setBaseOpacity(design.baseOpacity);
-    resetLayers(design.layers || []);
+    const layers = await rehydrateImageLayers(design.layers || []);
+    resetLayers(layers);
     setSelectedId(null);
     toast({ title: 'Design loaded', description: `"${design.name}" is ready to edit.` });
-  }, [resetLayers, toast]);
+  }, [rehydrateImageLayers, resetLayers, toast]);
 
   const renderOffscreen = useCallback(() => {
     const offscreen = document.createElement('canvas');
