@@ -98,8 +98,16 @@ const sortToColumn = (sort, fallback = 'updated_at') => {
 const savedDesignEntity = {
   async list(sort = '-updated_date', limit) {
     const client = requireSupabase();
+    const user = await getCurrentUser();
     const { column, ascending } = sortToColumn(sort);
-    let query = client.from('saved_designs').select('*').order(column, { ascending });
+    // Always scope "My Designs" to the current user. Admins have an RLS policy
+    // that can read every row, so we must filter explicitly here — otherwise an
+    // admin's own list would return everyone's designs (and blow past the limit).
+    let query = client
+      .from('saved_designs')
+      .select('*')
+      .eq('user_id', user.id)
+      .order(column, { ascending });
     if (limit) query = query.limit(limit);
     const { data, error } = await query;
     if (error) throw error;
