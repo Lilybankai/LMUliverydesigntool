@@ -9,6 +9,7 @@ import { isAdminEmail } from '@/lib/admin';
 import { base44 as db } from '@/api/base44Client';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoginGate from '@/components/livery/LoginGate';
+import ReplyNotificationDialog from '@/components/livery/ReplyNotificationDialog';
 // Add page imports here
 import LiveryEditor from './pages/LiveryEditor';
 import ThankYou from './pages/ThankYou';
@@ -51,13 +52,16 @@ const AuthenticatedApp = () => {
 
   // Render the main app
   return (
-    <Routes>
-      <Route path="/" element={<LiveryEditor />} />
-      <Route path="/ThankYou" element={<ThankYou />} />
-      <Route path="/admin" element={<AdminRoute />} />
-      {/* Add your page Route elements here */}
-      <Route path="*" element={<PageNotFound />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<LiveryEditor />} />
+        <Route path="/ThankYou" element={<ThankYou />} />
+        <Route path="/admin" element={<AdminRoute />} />
+        {/* Add your page Route elements here */}
+        <Route path="*" element={<PageNotFound />} />
+      </Routes>
+      <ReplyNotificationDialog isAuthenticated={isAuthenticated} />
+    </>
   );
 };
 

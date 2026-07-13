@@ -9,11 +9,12 @@ import {
 } from 'date-fns';
 import {
   Users, Layers, Download, Eye, Lightbulb, RefreshCw, ArrowLeft, MessageSquare,
-  ChevronRight, Car,
+  ChevronRight, Car, Reply, Send, Check, CheckCheck,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { base44 as db } from '@/api/base44Client';
 import { useToast } from '@/components/ui/use-toast';
 
@@ -176,6 +177,9 @@ export default function AdminDashboard() {
       .sort((a, b) => b.total - a.total);
   }, [activity]);
 
+  const [replyDrafts, setReplyDrafts] = useState({});
+  const [replyBusy, setReplyBusy] = useState(null);
+
   const updateSuggestion = async (id, patch) => {
     const prev = suggestions;
     setSuggestions((list) => list.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -184,6 +188,22 @@ export default function AdminDashboard() {
     } catch (e) {
       setSuggestions(prev);
       toast({ title: 'Update failed', description: e?.message, variant: 'destructive' });
+    }
+  };
+
+  const sendReply = async (id) => {
+    const text = (replyDrafts[id] || '').trim();
+    if (!text || replyBusy) return;
+    setReplyBusy(id);
+    try {
+      const updated = await db.entities.Suggestion.update(id, { admin_reply: text });
+      setSuggestions((list) => list.map((s) => (s.id === id ? updated : s)));
+      setReplyDrafts((d) => ({ ...d, [id]: '' }));
+      toast({ title: 'Reply sent', description: 'The user will see it next time they sign in.' });
+    } catch (e) {
+      toast({ title: 'Could not send reply', description: e?.message, variant: 'destructive' });
+    } finally {
+      setReplyBusy(null);
     }
   };
 
@@ -371,6 +391,42 @@ export default function AdminDashboard() {
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    {/* Existing reply */}
+                    {s.admin_reply && (
+                      <div className="mt-3 rounded-md bg-secondary/60 border border-border p-3">
+                        <div className="flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-wider text-primary">
+                          <Reply className="w-3 h-3" /> Your reply
+                          <span className="ml-auto flex items-center gap-1 text-muted-foreground normal-case tracking-normal">
+                            {s.reply_read_at
+                              ? <><CheckCheck className="w-3 h-3 text-primary" /> Seen</>
+                              : <><Check className="w-3 h-3" /> Sent · not seen yet</>}
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground whitespace-pre-wrap">{s.admin_reply}</p>
+                      </div>
+                    )}
+
+                    {/* Reply editor */}
+                    <div className="mt-3 flex items-start gap-2">
+                      <Textarea
+                        value={replyDrafts[s.id] ?? ''}
+                        onChange={(e) => setReplyDrafts((d) => ({ ...d, [s.id]: e.target.value }))}
+                        placeholder={s.admin_reply ? 'Send an updated reply…' : 'Reply to this user…'}
+                        rows={2}
+                        maxLength={2000}
+                        className="text-xs min-h-0"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={() => sendReply(s.id)}
+                        disabled={!(replyDrafts[s.id] || '').trim() || replyBusy === s.id}
+                        className="h-8 gap-1.5 flex-shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        {replyBusy === s.id ? 'Sending…' : s.admin_reply ? 'Update' : 'Reply'}
+                      </Button>
                     </div>
                   </div>
                 ))}

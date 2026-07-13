@@ -165,6 +165,9 @@ const mapSuggestion = (row) => ({
   body: row.body,
   status: row.status,
   admin_notes: row.admin_notes,
+  admin_reply: row.admin_reply,
+  admin_reply_at: row.admin_reply_at,
+  reply_read_at: row.reply_read_at,
   created_date: row.created_at,
   updated_date: row.updated_at,
 });
@@ -203,6 +206,11 @@ const suggestionEntity = {
     const patch = {};
     if (updates.status !== undefined) patch.status = updates.status;
     if (updates.admin_notes !== undefined) patch.admin_notes = updates.admin_notes;
+    if (updates.admin_reply !== undefined) {
+      patch.admin_reply = updates.admin_reply;
+      patch.admin_reply_at = new Date().toISOString();
+      patch.reply_read_at = null; // a fresh reply is unread until the user sees it
+    }
     const { data, error } = await client
       .from('suggestions')
       .update(patch)
@@ -211,6 +219,29 @@ const suggestionEntity = {
       .single();
     if (error) throw error;
     return mapSuggestion(data);
+  },
+
+  // Current user's suggestions that have an admin reply they haven't seen yet.
+  // Explicitly scoped to the caller so it's correct for admins too.
+  async unreadReplies() {
+    const client = requireSupabase();
+    const user = await getCurrentUser();
+    const { data, error } = await client
+      .from('suggestions')
+      .select('*')
+      .eq('user_id', user.id)
+      .not('admin_reply', 'is', null)
+      .is('reply_read_at', null)
+      .order('admin_reply_at', { ascending: false });
+    if (error) throw error;
+    return (data || []).map(mapSuggestion);
+  },
+
+  async markReplyRead(id) {
+    const client = requireSupabase();
+    const { error } = await client.rpc('mark_suggestion_reply_read', { p_id: id });
+    if (error) throw error;
+    return {};
   },
 };
 
