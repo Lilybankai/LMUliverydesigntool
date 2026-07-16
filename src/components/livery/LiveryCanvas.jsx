@@ -522,9 +522,9 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
       <div className="absolute bottom-3 right-3 flex flex-col items-center gap-2 select-none">
         <span className="text-[18px] text-muted-foreground font-rajdhani uppercase tracking-widest pointer-events-none">Officially Sponsored By</span>
         <img
-          src="https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/493e30e26_ApexChill_Logo_Transparent1.svg"
+          src="/apexchill-logo.jpg"
           alt="ApexChill"
-          className="h-[8.5rem] object-contain pointer-events-none"
+          className="h-[8.5rem] rounded-lg object-contain pointer-events-none"
         />
         <a
           href="https://discord.gg/3sKF42Pk8e"
