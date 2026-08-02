@@ -27,6 +27,17 @@ const requireSupabase = () => {
 
 const getCurrentUser = async () => {
   const client = requireSupabase();
+  // Prefer the locally-stored session over a network call. getUser() hits the
+  // GoTrue /user endpoint to validate the JWT, so a transient network failure
+  // there throws and looks exactly like "not authenticated" — which forces a
+  // logout and loses unsaved work mid-edit. getSession() reads from local
+  // storage (and autoRefreshToken keeps it fresh in the background), so we only
+  // fall through to the network — and only genuinely fail — when there is no
+  // usable local session at all (e.g. the refresh token itself is invalid).
+  const { data: sessionData } = await client.auth.getSession();
+  const sessionUser = sessionData?.session?.user;
+  if (sessionUser) return sessionUser;
+
   const { data, error } = await client.auth.getUser();
   if (error) throw error;
   if (!data.user) {
