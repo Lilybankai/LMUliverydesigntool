@@ -306,73 +306,99 @@ function drawWarped(ctx, layer, fn, centered = true) {
   const edges = layer.edges || DEFAULT_EDGES;
   const edgesBent = edges.some(e => e.dx !== 0 || e.dy !== 0);
 
-  ctx.save();
-  ctx.globalAlpha = layer.opacity;
-
+  // Collect every (destination triangle, source triangle) pair up front so we
+  // can composite them all into a single buffer below.
+  const tris = [];
   if (!edgesBent) {
     // Fast path — two triangles cover the straight-edged quad
-    drawTriangle(ctx, off,
-      pts[0], pts[1], pts[2],
-      { x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }
-    );
-    drawTriangle(ctx, off,
-      pts[0], pts[2], pts[3],
-      { x: 0, y: 0 }, { x: w, y: h }, { x: 0, y: h }
-    );
-    ctx.restore();
-    return;
-  }
-
-  // Curved-edge path — build an N×N grid where each row/col is a Bezier curve.
-  const N = 16;
-  // Precompute destination grid (canvas-space) and source grid (offscreen-space)
-  // pts: [TL=0, TR=1, BR=2, BL=3]; edgePts: [Top=0, Right=1, Bottom=2, Left=3]
-  const dst = [];
-  for (let j = 0; j <= N; j++) {
-    const t = j / N;
-    // Left/Right edges at row t (interpolate corner pairs along left & right curves)
-    const leftPt  = bezierEdgePoint(pts[0], pts[3], edgePts[3], t);
-    const rightPt = bezierEdgePoint(pts[1], pts[2], edgePts[1], t);
-    const row = [];
-    for (let i = 0; i <= N; i++) {
-      const s = i / N;
-      // Top/Bottom edges at col s
-      const topPt    = bezierEdgePoint(pts[0], pts[1], edgePts[0], s);
-      const bottomPt = bezierEdgePoint(pts[3], pts[2], edgePts[2], s);
-      // Coons-style blend: average horizontal and vertical interpolations,
-      // minus the bilinear blend of the 4 corners (standard transfinite Coons patch).
-      const hX = (1 - s) * leftPt.x + s * rightPt.x;
-      const hY = (1 - s) * leftPt.y + s * rightPt.y;
-      const vX = (1 - t) * topPt.x + t * bottomPt.x;
-      const vY = (1 - t) * topPt.y + t * bottomPt.y;
-      const bX = (1 - s) * (1 - t) * pts[0].x + s * (1 - t) * pts[1].x
-               + s * t * pts[2].x + (1 - s) * t * pts[3].x;
-      const bY = (1 - s) * (1 - t) * pts[0].y + s * (1 - t) * pts[1].y
-               + s * t * pts[2].y + (1 - s) * t * pts[3].y;
-      row.push({ x: hX + vX - bX, y: hY + vY - bY });
+    tris.push([[pts[0], pts[1], pts[2]], [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: h }]]);
+    tris.push([[pts[0], pts[2], pts[3]], [{ x: 0, y: 0 }, { x: w, y: h }, { x: 0, y: h }]]);
+  } else {
+    // Curved-edge path — build an N×N grid where each row/col is a Bezier curve.
+    const N = 16;
+    // pts: [TL=0, TR=1, BR=2, BL=3]; edgePts: [Top=0, Right=1, Bottom=2, Left=3]
+    const dst = [];
+    for (let j = 0; j <= N; j++) {
+      const t = j / N;
+      // Left/Right edges at row t (interpolate corner pairs along left & right curves)
+      const leftPt  = bezierEdgePoint(pts[0], pts[3], edgePts[3], t);
+      const rightPt = bezierEdgePoint(pts[1], pts[2], edgePts[1], t);
+      const row = [];
+      for (let i = 0; i <= N; i++) {
+        const s = i / N;
+        // Top/Bottom edges at col s
+        const topPt    = bezierEdgePoint(pts[0], pts[1], edgePts[0], s);
+        const bottomPt = bezierEdgePoint(pts[3], pts[2], edgePts[2], s);
+        // Coons-style blend: average horizontal and vertical interpolations,
+        // minus the bilinear blend of the 4 corners (standard transfinite Coons patch).
+        const hX = (1 - s) * leftPt.x + s * rightPt.x;
+        const hY = (1 - s) * leftPt.y + s * rightPt.y;
+        const vX = (1 - t) * topPt.x + t * bottomPt.x;
+        const vY = (1 - t) * topPt.y + t * bottomPt.y;
+        const bX = (1 - s) * (1 - t) * pts[0].x + s * (1 - t) * pts[1].x
+                 + s * t * pts[2].x + (1 - s) * t * pts[3].x;
+        const bY = (1 - s) * (1 - t) * pts[0].y + s * (1 - t) * pts[1].y
+                 + s * t * pts[2].y + (1 - s) * t * pts[3].y;
+        row.push({ x: hX + vX - bX, y: hY + vY - bY });
+      }
+      dst.push(row);
     }
-    dst.push(row);
-  }
 
-  // Source grid is a uniform N×N rectangle in offscreen coords
-  for (let j = 0; j < N; j++) {
-    for (let i = 0; i < N; i++) {
-      const s0x = (i / N) * w, s0y = (j / N) * h;
-      const s1x = ((i + 1) / N) * w, s1y = (j / N) * h;
-      const s2x = ((i + 1) / N) * w, s2y = ((j + 1) / N) * h;
-      const s3x = (i / N) * w, s3y = ((j + 1) / N) * h;
+    // Source grid is a uniform N×N rectangle in offscreen coords
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const s0x = (i / N) * w, s0y = (j / N) * h;
+        const s1x = ((i + 1) / N) * w, s1y = (j / N) * h;
+        const s2x = ((i + 1) / N) * w, s2y = ((j + 1) / N) * h;
+        const s3x = (i / N) * w, s3y = ((j + 1) / N) * h;
 
-      drawTriangle(ctx, off,
-        dst[j][i], dst[j][i + 1], dst[j + 1][i + 1],
-        { x: s0x, y: s0y }, { x: s1x, y: s1y }, { x: s2x, y: s2y }
-      );
-      drawTriangle(ctx, off,
-        dst[j][i], dst[j + 1][i + 1], dst[j + 1][i],
-        { x: s0x, y: s0y }, { x: s2x, y: s2y }, { x: s3x, y: s3y }
-      );
+        tris.push([[dst[j][i], dst[j][i + 1], dst[j + 1][i + 1]],
+                   [{ x: s0x, y: s0y }, { x: s1x, y: s1y }, { x: s2x, y: s2y }]]);
+        tris.push([[dst[j][i], dst[j + 1][i + 1], dst[j + 1][i]],
+                   [{ x: s0x, y: s0y }, { x: s2x, y: s2y }, { x: s3x, y: s3y }]]);
+      }
     }
   }
 
+  // Composite every triangle into a dedicated buffer at FULL opacity, then blit
+  // that buffer once at the layer's opacity. Two problems are solved together:
+  //   1. Interior triangle seams no longer let whatever is *underneath* the
+  //      layer show through — the buffer starts empty, so the only thing that
+  //      can bleed through a seam is transparency, not the base livery. Combined
+  //      with the edge dilation in drawTriangle (below) the seams close entirely,
+  //      killing the faint "wire mesh" that used to bake into exports.
+  //   2. Semi-transparent layers stay uniform: opacity is applied once on the
+  //      final blit instead of per-triangle, so overlapping (dilated) triangles
+  //      can't stack into darker seams.
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [d] of tris) {
+    for (const p of d) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+  }
+  if (!Number.isFinite(minX)) return; // nothing to draw
+
+  const pad = 2; // room for the sub-pixel dilation at the outer edge
+  const bx = Math.floor(minX - pad);
+  const by = Math.floor(minY - pad);
+  const bw = Math.max(1, Math.ceil(maxX + pad) - bx);
+  const bh = Math.max(1, Math.ceil(maxY + pad) - by);
+
+  const buf = document.createElement('canvas');
+  buf.width = bw;
+  buf.height = bh;
+  const bc = buf.getContext('2d');
+  bc.translate(-bx, -by); // draw in canvas-space coords, offset into the buffer
+  for (const [d, s] of tris) {
+    drawTriangle(bc, off, d[0], d[1], d[2], s[0], s[1], s[2]);
+  }
+
+  ctx.save();
+  ctx.globalAlpha = layer.opacity;
+  ctx.drawImage(buf, bx, by);
   ctx.restore();
 }
 
@@ -380,11 +406,29 @@ function drawWarped(ctx, layer, fn, centered = true) {
 function drawTriangle(ctx, img, d0, d1, d2, s0, s1, s2) {
   ctx.save();
 
-  // Clip to destination triangle
+  // Clip to the destination triangle, dilated ~0.5px outward from its centroid.
+  // Adjacent triangles share an edge, so pushing each one's vertices outward
+  // makes neighbours overlap by a fraction of a pixel — the anti-aliased seam
+  // between them is then fully covered instead of leaving a hairline gap. The
+  // affine transform below is still solved from the ORIGINAL (undilated) points,
+  // so the texture mapping is unchanged; only the mask grows slightly.
+  const cx = (d0.x + d1.x + d2.x) / 3;
+  const cy = (d0.y + d1.y + d2.y) / 3;
+  // ~1px of outward growth fully covers the anti-aliased seam between adjacent
+  // triangles. Because the triangles are composited at full opacity into a
+  // scratch buffer (see drawWarped), this overlap can't darken translucent
+  // layers, so we can afford enough growth to close the seam completely.
+  const grow = 1.0;
+  const dilate = (p) => {
+    const dx = p.x - cx, dy = p.y - cy;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: p.x + (dx / len) * grow, y: p.y + (dy / len) * grow };
+  };
+  const e0 = dilate(d0), e1 = dilate(d1), e2 = dilate(d2);
   ctx.beginPath();
-  ctx.moveTo(d0.x, d0.y);
-  ctx.lineTo(d1.x, d1.y);
-  ctx.lineTo(d2.x, d2.y);
+  ctx.moveTo(e0.x, e0.y);
+  ctx.lineTo(e1.x, e1.y);
+  ctx.lineTo(e2.x, e2.y);
   ctx.closePath();
   ctx.clip();
 
