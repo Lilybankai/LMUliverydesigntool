@@ -39,12 +39,15 @@ import PaywallDialog from '@/components/livery/PaywallDialog';
 import SuggestionDialog from '@/components/livery/SuggestionDialog';
 import { isAdminEmail } from '@/lib/admin';
 import useHistory from '@/hooks/useHistory';
+import useDraftAutosave from '@/hooks/useDraftAutosave';
 
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { RotateCcw } from 'lucide-react';
 
 // Paywall is disabled for now (login is required up front, downloads are free).
 // Flip to true to re-enable the free-export limit + subscription gate.
@@ -96,6 +99,8 @@ export default function LiveryEditor() {
   // Save/Load state
   const { isAuthenticated, user, checkUserAuth, logout } = useAuth();
   const { toast } = useToast();
+  // Local backup of unsaved work (survives a forced logout, crash, or tab close).
+  const { pendingDraft, saveDraft, keepDraft, clearDraft } = useDraftAutosave(user?.id);
   const [saveOpen, setSaveOpen] = useState(false);
   const [myDesignsOpen, setMyDesignsOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
@@ -305,8 +310,11 @@ export default function LiveryEditor() {
       eventName: 'livery_saved',
       properties: { vehicle_id: vehicleId, vehicle_name: vehicle.name, layer_count: layers.length },
     });
+    // Work is now safely persisted server-side — drop the local backup so a
+    // future session doesn't offer to "restore" an already-saved design.
+    clearDraft();
     toast({ title: 'Design saved', description: `"${name}" was saved to your designs.` });
-  }, [vehicleId, vehicle.name, baseColour, customColour, baseOpacity, layers, serializeLayers, toast]);
+  }, [vehicleId, vehicle.name, baseColour, customColour, baseOpacity, layers, serializeLayers, clearDraft, toast]);
 
   // Image layers are saved with their imageUrl but not the live HTMLImageElement
   // (_imgElement is stripped before saving). Rebuild that element from the URL so
@@ -333,6 +341,37 @@ export default function LiveryEditor() {
     setSelectedId(null);
     toast({ title: 'Design loaded', description: `"${design.name}" is ready to edit.` });
   }, [rehydrateImageLayers, resetLayers, toast]);
+
+  // Continuously back the working state up to localStorage. Hold off while a
+  // pending draft is awaiting the user's decision so we don't overwrite it with
+  // the empty starting canvas before they've had a chance to restore it.
+  useEffect(() => {
+    if (pendingDraft) return;
+    saveDraft({
+      vehicleId,
+      baseColour,
+      customColour,
+      baseOpacity,
+      layers: serializeLayers(layers),
+    });
+  }, [pendingDraft, saveDraft, serializeLayers, vehicleId, baseColour, customColour, baseOpacity, layers]);
+
+  const handleRestoreDraft = useCallback(async () => {
+    const d = pendingDraft;
+    if (!d) return;
+    if (d.vehicleId) setVehicleId(d.vehicleId);
+    if (d.baseColour) setBaseColour(d.baseColour);
+    if (d.customColour) setCustomColour(d.customColour);
+    if (typeof d.baseOpacity === 'number') setBaseOpacity(d.baseOpacity);
+    const restored = await rehydrateImageLayers(d.layers || []);
+    resetLayers(restored);
+    setSelectedId(null);
+    keepDraft();
+    toast({
+      title: 'Draft restored',
+      description: 'Your unsaved work is back. Save it to keep it permanently.',
+    });
+  }, [pendingDraft, rehydrateImageLayers, resetLayers, keepDraft, toast]);
 
   const renderOffscreen = useCallback(() => {
     const offscreen = document.createElement('canvas');
@@ -438,6 +477,35 @@ export default function LiveryEditor() {
         user={user}
         onLogout={() => logout(true)}
       />
+
+      {pendingDraft && (
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-b border-accent/40 bg-accent/10 text-sm">
+          <div className="flex items-center gap-2 text-foreground">
+            <RotateCcw className="w-4 h-4 flex-shrink-0 text-accent" />
+            <span>
+              You have unsaved work from a previous session
+              {pendingDraft.savedAt
+                ? ` (${new Date(pendingDraft.savedAt).toLocaleString()})`
+                : ''}
+              . Restore it?
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="gradient"
+              onClick={handleRestoreDraft}
+              className="h-8 font-rajdhani font-semibold uppercase tracking-wide gap-1.5"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Restore
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearDraft} className="h-8">
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-1 overflow-hidden">
         {/* Left panel — shape toolbar */}

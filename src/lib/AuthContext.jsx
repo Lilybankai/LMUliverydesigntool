@@ -19,8 +19,21 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(true);
       setAuthError(null);
     } catch (error) {
-      setUser(null);
-      setIsAuthenticated(false);
+      // Only a genuine "not authenticated" (no session / invalid token) should
+      // log the user out. A transient network failure while loading the profile
+      // must NOT wipe the session and kick the user out mid-edit — otherwise a
+      // brief blip during a background token refresh destroys unsaved work.
+      // Network/retryable errors from Supabase carry a non-401 (often 0/absent)
+      // status, so we leave the existing auth state intact and let a later
+      // refresh recover it.
+      const isAuthFailure =
+        error?.status === 401 ||
+        error?.status === 403 ||
+        error?.message === 'Authentication required';
+      if (isAuthFailure) {
+        setUser(null);
+        setIsAuthenticated(false);
+      }
     } finally {
       setIsLoadingAuth(false);
       setAuthChecked(true);
@@ -48,13 +61,33 @@ export const AuthProvider = ({ children }) => {
       });
 
     // React to sign-in / sign-out (incl. OAuth redirect-back and email login).
-    const unsubscribe = db.auth.onAuthStateChange((_event, session) => {
+    // Branch on the event type — NOT just on `session` being truthy. Supabase
+    // fires this for token refreshes and user updates too, and a transient
+    // refresh hiccup can deliver a null session without the user actually
+    // signing out. Treating that as a logout is exactly what was booting people
+    // out mid-edit, so only an explicit SIGNED_OUT clears the session here.
+    const unsubscribe = db.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      if (session) {
-        loadUser();
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
+      switch (event) {
+        case 'SIGNED_OUT':
+          setUser(null);
+          setIsAuthenticated(false);
+          break;
+        case 'TOKEN_REFRESHED':
+          // Still signed in — just a rotated token. Don't re-run the profile
+          // load (a network call that could fail); keep the current session.
+          if (session) setIsAuthenticated(true);
+          break;
+        case 'SIGNED_IN':
+        case 'INITIAL_SESSION':
+        case 'USER_UPDATED':
+          if (session) loadUser();
+          break;
+        default:
+          // Any other/unknown event: only act on a present session; never clear
+          // auth on a null one (that is what SIGNED_OUT is for).
+          if (session) loadUser();
+          break;
       }
     });
 
