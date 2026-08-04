@@ -2,7 +2,7 @@ const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Plus, Minus, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { drawShape, hitTest, getLayerCornerPoints, getLayerEdgePoints, DEFAULT_CORNERS, DEFAULT_EDGES } from '@/lib/shapes';
+import { drawShape, hitTest, getLayerCornerPoints, getLayerEdgePoints, storedHandleIndex, DEFAULT_CORNERS, DEFAULT_EDGES } from '@/lib/shapes';
 import { loadGoogleFont } from '@/lib/googleFonts';
 import CanvasTips from './CanvasTips';
 
@@ -372,23 +372,34 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
       const layer = layers.find(l => l.id === selectedId);
       if (!layer) return;
 
-      // Convert world delta -> layer-local delta (inverse rotate)
+      // Convert world delta -> layer-local delta. The flip mirrors handle
+      // positions in world space (see applyFlipToPoints), so un-mirror the world
+      // delta on any flipped axis BEFORE inverse-rotating — otherwise dragging a
+      // handle moves it in the opposite direction once the shape is flipped.
       const rad = -(layer.rotation * Math.PI) / 180;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
-      const wdx = x - cornerDrag.startX;
-      const wdy = y - cornerDrag.startY;
+      const sx = layer.flipX ? -1 : 1;
+      const sy = layer.flipY ? -1 : 1;
+      const wdx = (x - cornerDrag.startX) * sx;
+      const wdy = (y - cornerDrag.startY) * sy;
       const ldx = wdx * cos - wdy * sin;
       const ldy = wdx * sin + wdy * cos;
 
-      if (cornerDrag.kind === 'edge') {
+      // The hit index is a slot in the flip-reordered handle array; map it back
+      // to the entry in the stored (un-flipped) corners/edges array before
+      // editing, so the handle the user grabbed is the one that actually moves.
+      const isEdge = cornerDrag.kind === 'edge';
+      const storedIdx = storedHandleIndex(layer, cornerDrag.idx, isEdge);
+
+      if (isEdge) {
         const newEdges = cornerDrag.origEdges.map((e, i) =>
-          i === cornerDrag.idx ? { dx: e.dx + ldx, dy: e.dy + ldy } : { ...e }
+          i === storedIdx ? { dx: e.dx + ldx, dy: e.dy + ldy } : { ...e }
         );
         onLayerChange({ ...layer, edges: newEdges });
       } else {
         const newCorners = cornerDrag.origCorners.map((c, i) =>
-          i === cornerDrag.idx ? { dx: c.dx + ldx, dy: c.dy + ldy } : { ...c }
+          i === storedIdx ? { dx: c.dx + ldx, dy: c.dy + ldy } : { ...c }
         );
         onLayerChange({ ...layer, corners: newCorners });
       }

@@ -158,6 +158,23 @@ function applyFlipToPoints(pts, layer, isEdges) {
   return out;
 }
 
+// Inverse of the index REORDERING that applyFlipToPoints performs. Given the
+// index of a handle in the flip-adjusted array returned by getLayerCornerPoints
+// / getLayerEdgePoints (i.e. the on-screen slot the user grabbed), returns the
+// index of the matching entry in the layer's STORED corners/edges array, which
+// is always kept in un-flipped order. This runs the exact same reorder steps on
+// a plain index list, so it can never drift out of sync with applyFlipToPoints.
+export function storedHandleIndex(layer, visualIdx, isEdges) {
+  let idx = [0, 1, 2, 3];
+  if (layer.flipX) {
+    idx = isEdges ? [idx[0], idx[3], idx[2], idx[1]] : [idx[1], idx[0], idx[3], idx[2]];
+  }
+  if (layer.flipY) {
+    idx = isEdges ? [idx[2], idx[1], idx[0], idx[3]] : [idx[3], idx[2], idx[1], idx[0]];
+  }
+  return idx[visualIdx];
+}
+
 // Returns the 4 actual canvas points [TL, TR, BR, BL] for a layer (after rotation+skew+distort+flip)
 export function getLayerCornerPoints(layer) {
   const corners = layer.corners || DEFAULT_CORNERS;
