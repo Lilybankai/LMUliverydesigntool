@@ -101,6 +101,10 @@ export default function LiveryEditor() {
   const { toast } = useToast();
   // Local backup of unsaved work (survives a forced logout, crash, or tab close).
   const { pendingDraft, saveDraft, keepDraft, clearDraft } = useDraftAutosave(user?.id);
+  // Tracks the design currently being edited (set when one is loaded or first
+  // saved) so re-saving overwrites it in place instead of creating a duplicate.
+  const [currentDesignId, setCurrentDesignId] = useState(null);
+  const [currentDesignName, setCurrentDesignName] = useState('');
   const [saveOpen, setSaveOpen] = useState(false);
   const [myDesignsOpen, setMyDesignsOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
@@ -140,6 +144,10 @@ export default function LiveryEditor() {
     setVehicleId(id);
     resetLayers([]);
     setSelectedId(null);
+    // Switching vehicle clears the canvas — that's a fresh design, so the next
+    // save should create a new entry rather than overwrite the loaded one.
+    setCurrentDesignId(null);
+    setCurrentDesignName('');
   }, [resetLayers]);
 
   // Returns "<base> N" where N is the next unused index among existing layers
@@ -297,24 +305,51 @@ export default function LiveryEditor() {
 
   const requestMyDesigns = useCallback(() => setMyDesignsOpen(true), []);
 
-  const handleSaveDesign = useCallback(async (name) => {
-    await db.entities.SavedDesign.create({
+  // Save the current livery. Pass { update: true } to overwrite the design the
+  // user loaded (currentDesignId); otherwise a new entry is created. Errors are
+  // surfaced as a toast instead of failing silently.
+  const handleSaveDesign = useCallback(async (name, { update = false } = {}) => {
+    const payload = {
       name,
       vehicleId,
       baseColour,
       customColour,
       baseOpacity,
       layers: serializeLayers(layers),
-    });
+    };
+    try {
+      if (update && currentDesignId) {
+        await db.entities.SavedDesign.update(currentDesignId, payload);
+      } else {
+        const created = await db.entities.SavedDesign.create(payload);
+        if (created?.id) setCurrentDesignId(created.id);
+      }
+      setCurrentDesignName(name);
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Could not save design',
+        description: err?.message || 'Something went wrong. Please try again.',
+      });
+      throw err; // let the dialog know the save failed so it stays open
+    }
     db.analytics.track({
       eventName: 'livery_saved',
-      properties: { vehicle_id: vehicleId, vehicle_name: vehicle.name, layer_count: layers.length },
+      properties: {
+        vehicle_id: vehicleId,
+        vehicle_name: vehicle.name,
+        layer_count: layers.length,
+        updated: !!(update && currentDesignId),
+      },
     });
     // Work is now safely persisted server-side — drop the local backup so a
     // future session doesn't offer to "restore" an already-saved design.
     clearDraft();
-    toast({ title: 'Design saved', description: `"${name}" was saved to your designs.` });
-  }, [vehicleId, vehicle.name, baseColour, customColour, baseOpacity, layers, serializeLayers, clearDraft, toast]);
+    toast({
+      title: update && currentDesignId ? 'Design updated' : 'Design saved',
+      description: `"${name}" was saved to your designs.`,
+    });
+  }, [vehicleId, vehicle.name, baseColour, customColour, baseOpacity, layers, serializeLayers, currentDesignId, clearDraft, toast]);
 
   // Image layers are saved with their imageUrl but not the live HTMLImageElement
   // (_imgElement is stripped before saving). Rebuild that element from the URL so
@@ -339,6 +374,9 @@ export default function LiveryEditor() {
     const layers = await rehydrateImageLayers(design.layers || []);
     resetLayers(layers);
     setSelectedId(null);
+    // Remember which design this is so re-saving overwrites it in place.
+    setCurrentDesignId(design.id);
+    setCurrentDesignName(design.name);
     toast({ title: 'Design loaded', description: `"${design.name}" is ready to edit.` });
   }, [rehydrateImageLayers, resetLayers, toast]);
 
@@ -662,7 +700,13 @@ export default function LiveryEditor() {
       </div>
 
       <MobileWarningDialog />
-      <SaveDesignDialog open={saveOpen} onOpenChange={setSaveOpen} onSave={handleSaveDesign} />
+      <SaveDesignDialog
+        open={saveOpen}
+        onOpenChange={setSaveOpen}
+        onSave={handleSaveDesign}
+        currentDesignId={currentDesignId}
+        currentDesignName={currentDesignName}
+      />
       <MyDesignsDialog open={myDesignsOpen} onOpenChange={setMyDesignsOpen} onLoad={handleLoadDesign} />
       <ExportAdDialog open={adOpen} onOpenChange={setAdOpen} ad={currentAd} onDownload={handleDownload} />
       <PaywallDialog open={paywallOpen} onOpenChange={setPaywallOpen} />
