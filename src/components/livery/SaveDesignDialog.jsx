@@ -8,39 +8,51 @@ import { Input } from '@/components/ui/input';
 import { Save, AlertTriangle, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { VEHICLES } from '@/lib/vehicles';
+import { MAX_DESIGNS } from '@/lib/savedDesigns';
 
-const MAX_DESIGNS = 10;
-
-export default function SaveDesignDialog({ open, onOpenChange, onSave }) {
+export default function SaveDesignDialog({ open, onOpenChange, onSave, currentDesignId = null, currentDesignName = '' }) {
   const [name, setName] = useState('');
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [replaceId, setReplaceId] = useState(null);
+  // 'update' overwrites the loaded design in place; 'new' saves a fresh copy.
+  const [mode, setMode] = useState('new');
 
   useEffect(() => {
     if (!open) return;
-    setName('');
+    setName(currentDesignId ? (currentDesignName || '') : '');
+    setMode(currentDesignId ? 'update' : 'new');
     setReplaceId(null);
     setLoading(true);
     db.entities.SavedDesign.list('-updated_date').then((list) => {
       setDesigns(list || []);
       setLoading(false);
     });
-  }, [open]);
+  }, [open, currentDesignId, currentDesignName]);
 
-  const atLimit = designs.length >= MAX_DESIGNS;
+  const isUpdate = mode === 'update' && !!currentDesignId;
+  // The design limit only matters when creating a NEW entry — overwriting an
+  // existing one never adds a row, so it must work even when the user is full.
+  const atLimit = !isUpdate && designs.length >= MAX_DESIGNS;
+  const blockedByLimit = atLimit && !replaceId;
 
   const handleSave = async () => {
     if (!name.trim()) return;
-    if (atLimit && !replaceId) return;
+    if (blockedByLimit) return;
     setBusy(true);
-    if (atLimit && replaceId) {
-      await db.entities.SavedDesign.delete(replaceId);
+    try {
+      if (atLimit && replaceId) {
+        await db.entities.SavedDesign.delete(replaceId);
+      }
+      await onSave(name.trim(), { update: isUpdate });
+      onOpenChange(false);
+    } catch {
+      // onSave surfaces its own error toast — keep the dialog open so the user
+      // can retry rather than silently losing the click.
+    } finally {
+      setBusy(false);
     }
-    await onSave(name.trim());
-    setBusy(false);
-    onOpenChange(false);
   };
 
   const vehicleName = (id) => VEHICLES.find(v => v.id === id)?.name || id;
@@ -57,6 +69,35 @@ export default function SaveDesignDialog({ open, onOpenChange, onSave }) {
             Name your livery so you can recall it later. ({designs.length}/{MAX_DESIGNS} saved)
           </DialogDescription>
         </DialogHeader>
+
+        {currentDesignId && (
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setMode('update')}
+              className={`rounded p-2 text-left text-xs border transition-colors ${
+                mode === 'update'
+                  ? 'bg-primary/15 border-primary text-foreground'
+                  : 'bg-secondary border-border hover:bg-secondary/80 text-muted-foreground'
+              }`}
+            >
+              <div className="font-semibold">Update this design</div>
+              <div className="text-[10px] truncate">Overwrite "{currentDesignName}"</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('new')}
+              className={`rounded p-2 text-left text-xs border transition-colors ${
+                mode === 'new'
+                  ? 'bg-primary/15 border-primary text-foreground'
+                  : 'bg-secondary border-border hover:bg-secondary/80 text-muted-foreground'
+              }`}
+            >
+              <div className="font-semibold">Save as new</div>
+              <div className="text-[10px] truncate">Keep a separate copy</div>
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <label className="text-xs text-muted-foreground uppercase tracking-wider font-rajdhani">Design Name</label>
@@ -109,11 +150,11 @@ export default function SaveDesignDialog({ open, onOpenChange, onSave }) {
           <Button
             size="sm"
             onClick={handleSave}
-            disabled={!name.trim() || busy || (atLimit && !replaceId)}
+            disabled={!name.trim() || busy || blockedByLimit}
             className="bg-primary text-primary-foreground hover:bg-primary/90 font-rajdhani font-semibold tracking-wide gap-2"
           >
             <Save className="w-4 h-4" />
-            {atLimit && replaceId ? 'Replace & Save' : 'Save'}
+            {isUpdate ? 'Update' : (atLimit && replaceId ? 'Replace & Save' : 'Save')}
           </Button>
         </div>
       </DialogContent>

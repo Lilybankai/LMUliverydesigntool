@@ -3,14 +3,18 @@ const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me
 import { useState, useEffect, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
 
-import { FolderOpen, Trash2, Upload } from 'lucide-react';
+import { FolderOpen, Trash2, Upload, CopyX } from 'lucide-react';
 import { format } from 'date-fns';
 import { VEHICLES } from '@/lib/vehicles';
+import { MAX_DESIGNS, findDuplicateIds } from '@/lib/savedDesigns';
 
 export default function MyDesignsDialog({ open, onOpenChange, onLoad }) {
   const [designs, setDesigns] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [deduping, setDeduping] = useState(false);
+  const { toast } = useToast();
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -35,6 +39,30 @@ export default function MyDesignsDialog({ open, onOpenChange, onLoad }) {
     refresh();
   };
 
+  // Ids of redundant copies (older duplicates that share a name + vehicle).
+  const duplicateIds = findDuplicateIds(designs);
+
+  const handleRemoveDuplicates = async () => {
+    if (duplicateIds.length === 0) return;
+    setDeduping(true);
+    try {
+      await Promise.all(duplicateIds.map(id => db.entities.SavedDesign.delete(id)));
+      toast({
+        title: 'Duplicates removed',
+        description: `Removed ${duplicateIds.length} duplicate ${duplicateIds.length === 1 ? 'copy' : 'copies'}, keeping the newest of each.`,
+      });
+      await refresh();
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Could not remove duplicates',
+        description: err?.message || 'Something went wrong. Please try again.',
+      });
+    } finally {
+      setDeduping(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg bg-card border-border">
@@ -44,9 +72,29 @@ export default function MyDesignsDialog({ open, onOpenChange, onLoad }) {
             My Designs
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            {designs.length}/10 saved designs. Click one to load it.
+            {designs.length}/{MAX_DESIGNS} saved designs. Click one to load it.
           </DialogDescription>
         </DialogHeader>
+
+        {duplicateIds.length > 0 && !loading && (
+          <div className="flex items-center gap-3 p-3 rounded bg-accent/10 border border-accent/40">
+            <CopyX className="w-4 h-4 flex-shrink-0 text-accent" />
+            <p className="flex-1 text-xs leading-relaxed text-foreground">
+              You have {duplicateIds.length} duplicate {duplicateIds.length === 1 ? 'design' : 'designs'} (same
+              name and vehicle). Remove them to free up space — the newest copy of each is kept.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleRemoveDuplicates}
+              disabled={deduping}
+              className="flex-shrink-0 gap-1.5"
+            >
+              <CopyX className="w-3.5 h-3.5" />
+              {deduping ? 'Removing…' : `Remove ${duplicateIds.length}`}
+            </Button>
+          </div>
+        )}
 
         <div className="max-h-96 overflow-y-auto flex flex-col gap-2">
           {loading && <p className="text-sm text-muted-foreground text-center py-6">Loading…</p>}

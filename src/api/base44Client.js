@@ -145,6 +145,32 @@ const savedDesignEntity = {
     return mapSavedDesign(data);
   },
 
+  // Overwrite an existing design in place (used when re-saving a design the
+  // user loaded). Scoped to the owner both here and by RLS. Updating never
+  // consumes a new slot, so it works even at the saved-design limit.
+  async update(id, payload) {
+    const client = requireSupabase();
+    const user = await getCurrentUser();
+    const patch = {};
+    if (payload.name !== undefined) patch.name = payload.name;
+    if (payload.vehicleId !== undefined) patch.vehicle_id = payload.vehicleId;
+    if (payload.baseColour !== undefined) patch.base_colour = payload.baseColour || null;
+    if (payload.customColour !== undefined) patch.custom_colour = payload.customColour || null;
+    if (payload.baseOpacity !== undefined) {
+      patch.base_opacity = typeof payload.baseOpacity === 'number' ? payload.baseOpacity : 1;
+    }
+    if (payload.layers !== undefined) patch.layers = payload.layers || [];
+    const { data, error } = await client
+      .from('saved_designs')
+      .update(patch)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+    return mapSavedDesign(data);
+  },
+
   async delete(id) {
     const client = requireSupabase();
     const { error } = await client.from('saved_designs').delete().eq('id', id);
