@@ -59,7 +59,32 @@ export function loadImageFile(file, onReady) {
   reader.onload = () => {
     const dataUrl = reader.result;
     const img = new Image();
-    img.onload = () => onReady(dataUrl, img.naturalWidth, img.naturalHeight, img);
+    img.onload = () => {
+      const w = img.naturalWidth;
+      const h = img.naturalHeight;
+      // Cap the stored resolution. Images are embedded as base64 in the saved
+      // design, so a full-res phone photo / 4K logo bloats the row and can make
+      // the save exceed the database statement timeout. 2048px is plenty for a
+      // livery and keeps rows small. Smaller images are passed through untouched
+      // so we never needlessly re-encode (and lose quality on) a normal logo.
+      const MAX = 2048;
+      if (Math.max(w, h) <= MAX) {
+        onReady(dataUrl, w, h, img);
+        return;
+      }
+      const scale = MAX / Math.max(w, h);
+      const rw = Math.max(1, Math.round(w * scale));
+      const rh = Math.max(1, Math.round(h * scale));
+      const off = document.createElement('canvas');
+      off.width = rw;
+      off.height = rh;
+      off.getContext('2d').drawImage(img, 0, 0, rw, rh);
+      // PNG keeps transparency (logos/decals rely on it).
+      const scaledUrl = off.toDataURL('image/png');
+      const finalImg = new Image();
+      finalImg.onload = () => onReady(scaledUrl, finalImg.naturalWidth, finalImg.naturalHeight, finalImg);
+      finalImg.src = scaledUrl;
+    };
     img.src = dataUrl;
   };
   reader.readAsDataURL(file);
