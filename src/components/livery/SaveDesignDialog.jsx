@@ -8,8 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Save, AlertTriangle, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { VEHICLES } from '@/lib/vehicles';
-
-const MAX_DESIGNS = 10;
+import { MAX_DESIGNS } from '@/lib/savedDesigns';
 
 export default function SaveDesignDialog({ open, onOpenChange, onSave, currentDesignId = null, currentDesignName = '' }) {
   const [name, setName] = useState('');
