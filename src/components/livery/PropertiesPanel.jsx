@@ -8,6 +8,65 @@ import HoldButton from './HoldButton';
 import TextEditorPanel from './TextEditorPanel';
 import GradientPanel from './GradientPanel';
 
+// Split a colour string into its solid #rrggbb part and a 0..1 alpha. Handles
+// #rgb, #rrggbb and #rrggbbaa; anything else (named colours) is treated as
+// opaque since we can't reliably edit its alpha.
+function parseColour(c) {
+  const s = typeof c === 'string' ? c.trim() : '';
+  if (/^#[0-9a-f]{3}$/i.test(s)) {
+    return { rgb: `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`.toLowerCase(), alpha: 1 };
+  }
+  if (/^#[0-9a-f]{6}$/i.test(s)) return { rgb: s.toLowerCase(), alpha: 1 };
+  if (/^#[0-9a-f]{8}$/i.test(s)) {
+    return { rgb: s.slice(0, 7).toLowerCase(), alpha: parseInt(s.slice(7, 9), 16) / 255 };
+  }
+  return { rgb: '#000000', alpha: 1 };
+}
+
+// Recombine a #rrggbb + alpha into a colour string. Stays 6-digit when fully
+// opaque (clean, and unchanged from before this feature); 8-digit otherwise.
+function combineColour(rgb6, alpha) {
+  const a = Math.max(0, Math.min(1, alpha));
+  if (a >= 1) return rgb6;
+  return `${rgb6}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
+}
+
+// A colour picker with a swatch, hex field, and an opacity slider. Opacity is
+// stored in the colour itself (as #rrggbbaa), so patterns/shapes render it with
+// no extra plumbing — e.g. a translucent pattern colour lets a stripe layer
+// underneath show through.
+function ColourField({ label, value, fallback, onChange }) {
+  const { rgb, alpha } = parseColour(value || fallback);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div className="flex items-center gap-2">
+        <input
+          type="color"
+          value={rgb}
+          onChange={e => onChange(combineColour(e.target.value, alpha))}
+          className="w-8 h-8 rounded cursor-pointer border border-border bg-transparent"
+        />
+        <Input
+          value={value || fallback}
+          onChange={e => onChange(e.target.value)}
+          className="h-7 text-xs font-mono uppercase"
+        />
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-muted-foreground w-14">Opacity</span>
+        <Slider
+          min={0} max={1} step={0.01}
+          value={[alpha]}
+          onValueChange={([v]) => onChange(combineColour(rgb, v))}
+          className="flex-1"
+        />
+        <span className="text-[10px] text-muted-foreground w-8 text-right">{Math.round(alpha * 100)}%</span>
+      </div>
+    </div>
+  );
+}
+
 export default function PropertiesPanel({ layer, onChange }) {
   const [nudgeStep, setNudgeStep] = useState(10);
   const [sizeStep, setSizeStep] = useState(10);
@@ -69,41 +128,21 @@ export default function PropertiesPanel({ layer, onChange }) {
       {isText && <TextEditorPanel layer={layer} onChange={onChange} />}
 
       {/* Colour */}
-      <div className="flex flex-col gap-1.5">
-        <Label className="text-xs">{isText ? 'Text Colour' : isPatternOrTexture ? 'Colour 1' : 'Colour'}</Label>
-        <div className="flex items-center gap-2">
-          <input
-            type="color"
-            value={layer.colour}
-            onChange={e => update('colour', e.target.value)}
-            className="w-8 h-8 rounded cursor-pointer border border-border bg-transparent"
-          />
-          <Input
-            value={layer.colour}
-            onChange={e => update('colour', e.target.value)}
-            className="h-7 text-xs font-mono uppercase"
-          />
-        </div>
-      </div>
+      <ColourField
+        label={isText ? 'Text Colour' : isPatternOrTexture ? 'Colour 1' : 'Colour'}
+        value={layer.colour}
+        fallback="#000000"
+        onChange={v => update('colour', v)}
+      />
 
       {/* Second colour for patterns/textures */}
       {isPatternOrTexture && (
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Colour 2</Label>
-          <div className="flex items-center gap-2">
-            <input
-              type="color"
-              value={layer.colour2 || '#FFFFFF'}
-              onChange={e => update('colour2', e.target.value)}
-              className="w-8 h-8 rounded cursor-pointer border border-border bg-transparent"
-            />
-            <Input
-              value={layer.colour2 || '#FFFFFF'}
-              onChange={e => update('colour2', e.target.value)}
-              className="h-7 text-xs font-mono uppercase"
-            />
-          </div>
-        </div>
+        <ColourField
+          label="Colour 2"
+          value={layer.colour2 || '#FFFFFF'}
+          fallback="#FFFFFF"
+          onChange={v => update('colour2', v)}
+        />
       )}
 
       {/* Gradient fill */}

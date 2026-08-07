@@ -205,6 +205,10 @@ export default function LiveryEditor() {
     setLayers(prev => prev.map(l => l.id === id ? { ...l, locked: !l.locked } : l));
   }, [setLayers]);
 
+  const handleRenameLayer = useCallback((id, label) => {
+    setLayers(prev => prev.map(l => l.id === id ? { ...l, label } : l));
+  }, [setLayers]);
+
   const handleDelete = useCallback((id) => {
     let removed = false;
     setLayers(prev => {
@@ -693,6 +697,7 @@ export default function LiveryEditor() {
               onSelect={setSelectedId}
               onToggleVisible={handleToggleVisible}
               onToggleLock={handleToggleLock}
+              onRename={handleRenameLayer}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onMirror={handleMirror}

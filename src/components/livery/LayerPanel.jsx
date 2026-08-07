@@ -1,9 +1,19 @@
+import { useState } from 'react';
 import { Eye, EyeOff, Trash2, ChevronUp, ChevronDown, Copy, FlipHorizontal, Lock, Unlock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisible, onToggleLock, onDelete, onReorder, onDuplicate, onMirror }) {
+export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisible, onToggleLock, onDelete, onReorder, onDuplicate, onMirror, onRename }) {
   const reversedLayers = [...layers].reverse();
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState('');
+
+  const startRename = (layer) => { setEditingId(layer.id); setDraft(layer.label); };
+  const commitRename = (layer) => {
+    const name = draft.trim();
+    if (name && name !== layer.label) onRename(layer.id, name);
+    setEditingId(null);
+  };
 
   return (
     <div className="flex flex-col gap-1">
@@ -29,11 +39,31 @@ export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisib
               className="w-3 h-3 rounded-sm flex-shrink-0 border border-border"
               style={{ background: layer.colour }}
             />
-            {/* label */}
-            <span className={cn('flex-1 truncate flex items-center gap-1', !layer.visible && 'opacity-40')}>
-              {layer.locked && <Lock className="w-3 h-3 flex-shrink-0 text-primary" />}
-              <span className="truncate">{layer.label}</span>
-            </span>
+            {/* label (double-click to rename) */}
+            {editingId === layer.id ? (
+              <input
+                autoFocus
+                value={draft}
+                maxLength={40}
+                onClick={e => e.stopPropagation()}
+                onChange={e => setDraft(e.target.value)}
+                onBlur={() => commitRename(layer)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') commitRename(layer);
+                  else if (e.key === 'Escape') setEditingId(null);
+                }}
+                className="flex-1 min-w-0 bg-background border border-primary/50 rounded px-1 py-0.5 text-xs outline-none"
+              />
+            ) : (
+              <span
+                className={cn('flex-1 truncate flex items-center gap-1', !layer.visible && 'opacity-40')}
+                onDoubleClick={e => { e.stopPropagation(); startRename(layer); }}
+                title="Double-click to rename"
+              >
+                {layer.locked && <Lock className="w-3 h-3 flex-shrink-0 text-primary" />}
+                <span className="truncate">{layer.label}</span>
+              </span>
+            )}
             {/* reorder */}
             <Button
               variant="ghost" size="icon"
