@@ -47,7 +47,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Lock } from 'lucide-react';
 
 // Paywall is disabled for now (login is required up front, downloads are free).
 // Flip to true to re-enable the free-export limit + subscription gate.
@@ -199,9 +199,21 @@ export default function LiveryEditor() {
     setLayers(prev => prev.map(l => l.id === id ? { ...l, visible: !l.visible } : l));
   }, [setLayers]);
 
+  // Lock/unlock a layer. Locked layers can't be moved, reshaped, or selected on
+  // the canvas — handy for an overlay you want to keep in place.
+  const handleToggleLock = useCallback((id) => {
+    setLayers(prev => prev.map(l => l.id === id ? { ...l, locked: !l.locked } : l));
+  }, [setLayers]);
+
   const handleDelete = useCallback((id) => {
-    setLayers(prev => prev.filter(l => l.id !== id));
-    setSelectedId(prev => prev === id ? null : prev);
+    let removed = false;
+    setLayers(prev => {
+      const target = prev.find(l => l.id === id);
+      if (target?.locked) return prev; // locked layers can't be deleted
+      removed = true;
+      return prev.filter(l => l.id !== id);
+    });
+    if (removed) setSelectedId(prev => prev === id ? null : prev);
   }, [setLayers]);
 
   const handleDuplicate = useCallback((id) => {
@@ -216,6 +228,7 @@ export default function LiveryEditor() {
         id: crypto.randomUUID(),
         x: src.x + 30,
         y: src.y + 30,
+        locked: false, // a fresh copy should be editable even if the source was locked
         corners: (src.corners || [{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0}]).map(c => ({ ...c })),
         edges: (src.edges || [{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0}]).map(e => ({ ...e })),
         label: nextLabel(base, prev),
@@ -239,6 +252,7 @@ export default function LiveryEditor() {
         x: src.x + 30,
         y: src.y + 30,
         rotation: ((src.rotation || 0) + 180) % 360,
+        locked: false, // a fresh copy should be editable even if the source was locked
         corners: (src.corners || [{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0}]).map(c => ({ ...c })),
         edges: (src.edges || [{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0}]).map(e => ({ ...e })),
         label: `${nextLabel(base, prev)} (Mirror)`,
@@ -272,6 +286,7 @@ export default function LiveryEditor() {
       colour2: '#FFFFFF',
       opacity: 1,
       visible: true,
+      locked: false,
       label: 'Image',
       imageUrl: url,
       _imgElement: imgEl,
@@ -677,6 +692,7 @@ export default function LiveryEditor() {
               selectedId={selectedId}
               onSelect={setSelectedId}
               onToggleVisible={handleToggleVisible}
+              onToggleLock={handleToggleLock}
               onDelete={handleDelete}
               onDuplicate={handleDuplicate}
               onMirror={handleMirror}
@@ -688,10 +704,29 @@ export default function LiveryEditor() {
             {selectedLayer && (
               <>
                 <div className="my-3 h-px bg-border" />
-                <PropertiesPanel
-                  layer={selectedLayer}
-                  onChange={handleLayerChange}
-                />
+                {selectedLayer.locked ? (
+                  <div className="flex flex-col items-center gap-3 py-6 px-3 text-center">
+                    <Lock className="w-6 h-6 text-primary" />
+                    <p className="text-xs text-muted-foreground">
+                      <span className="text-foreground font-semibold">{selectedLayer.label}</span> is locked.
+                      Unlock it to move or edit.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleToggleLock(selectedLayer.id)}
+                      className="gap-1.5"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      Unlock layer
+                    </Button>
+                  </div>
+                ) : (
+                  <PropertiesPanel
+                    layer={selectedLayer}
+                    onChange={handleLayerChange}
+                  />
+                )}
               </>
             )}
             </div>

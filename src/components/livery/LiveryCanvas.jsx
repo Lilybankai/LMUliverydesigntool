@@ -186,8 +186,12 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
           ctx.restore();
         };
         drawOutline('rgba(0,0,0,0.7)', 7);
-        drawOutline('#FFFFFF', 3);
+        // Locked layers show a distinct amber outline and no transform handles,
+        // so it's clear they can't be moved or reshaped.
+        drawOutline(layer.locked ? '#F5C400' : '#FFFFFF', 3);
 
+        // Locked layers are not editable — skip the drag handles entirely.
+        if (!layer.locked) {
         // Corner handles (white circles with gold centre)
         for (const pt of cornerPts) {
           ctx.beginPath();
@@ -218,6 +222,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
           ctx.arc(pt.x, pt.y, EDGE_HANDLE_RADIUS * 0.45, 0, Math.PI * 2);
           ctx.fillStyle = '#2196F3';
           ctx.fill();
+        }
         }
       }
     }
@@ -278,7 +283,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
 
     if (selectedId) {
       const layer = layers.find(l => l.id === selectedId);
-      if (layer) {
+      if (layer && !layer.locked) {
         const cornerPts = getLayerCornerPoints(layer);
         const edgePts = getLayerEdgePoints(layer);
         const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
@@ -314,7 +319,9 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
 
     let hit = null;
     for (let i = layers.length - 1; i >= 0; i--) {
-      if (layers[i].visible && hitTest(layers[i], x, y)) {
+      // Locked layers are click-through — you can't select or move them on the
+      // canvas (unlock them from the Layers panel first).
+      if (layers[i].visible && !layers[i].locked && hitTest(layers[i], x, y)) {
         hit = layers[i];
         break;
       }
@@ -346,7 +353,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
       let onHandle = false;
       if (selectedId) {
         const layer = layers.find(l => l.id === selectedId);
-        if (layer) {
+        if (layer && !layer.locked) {
           const cornerPts = getLayerCornerPoints(layer);
           const edgePts = getLayerEdgePoints(layer);
           const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
@@ -359,7 +366,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
       }
       if (!onHandle) {
         for (let i = layers.length - 1; i >= 0; i--) {
-          if (layers[i].visible && hitTest(layers[i], x, y)) {
+          if (layers[i].visible && !layers[i].locked && hitTest(layers[i], x, y)) {
             next = 'grab';
             break;
           }
