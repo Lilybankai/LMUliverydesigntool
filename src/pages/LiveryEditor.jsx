@@ -209,6 +209,87 @@ export default function LiveryEditor() {
     setLayers(prev => prev.map(l => l.id === id ? { ...l, label } : l));
   }, [setLayers]);
 
+  // ── Layer groups (organisational folders in the Layers panel) ──────────────
+  // Membership is stored as groupId/groupName on each layer, so it persists with
+  // saved designs and the local draft. Members are kept adjacent in the array so
+  // a group reads as one contiguous folder.
+  const handleCreateGroup = useCallback((layerId) => {
+    setLayers(prev => {
+      const existing = new Set(prev.map(l => l.groupId).filter(Boolean));
+      const gid = crypto.randomUUID();
+      const name = `Group ${existing.size + 1}`;
+      return prev.map(l => l.id === layerId ? { ...l, groupId: gid, groupName: name } : l);
+    });
+  }, [setLayers]);
+
+  // Move a layer into an existing group, placing it adjacent to that group's
+  // block so the folder stays contiguous.
+  const handleAddToGroup = useCallback((layerId, gid) => {
+    setLayers(prev => {
+      const group = prev.filter(l => l.groupId === gid);
+      if (!group.length) return prev;
+      const src = prev.find(l => l.id === layerId);
+      if (!src) return prev;
+      const moved = { ...src, groupId: gid, groupName: group[0].groupName };
+      const without = prev.filter(l => l.id !== layerId);
+      let insertAt = without.length;
+      for (let i = 0; i < without.length; i++) if (without[i].groupId === gid) insertAt = i + 1;
+      const arr = [...without];
+      arr.splice(insertAt, 0, moved);
+      return arr;
+    });
+  }, [setLayers]);
+
+  // Remove one layer from its group, keeping the rest of the block contiguous.
+  const handleRemoveFromGroup = useCallback((layerId) => {
+    setLayers(prev => {
+      const src = prev.find(l => l.id === layerId);
+      if (!src?.groupId) return prev;
+      const gid = src.groupId;
+      const cleared = { ...src, groupId: undefined, groupName: undefined };
+      const without = prev.filter(l => l.id !== layerId);
+      let insertAt = without.length;
+      for (let i = 0; i < without.length; i++) if (without[i].groupId === gid) insertAt = i + 1;
+      const arr = [...without];
+      arr.splice(insertAt, 0, cleared);
+      return arr;
+    });
+  }, [setLayers]);
+
+  const handleRenameGroup = useCallback((gid, name) => {
+    setLayers(prev => prev.map(l => l.groupId === gid ? { ...l, groupName: name } : l));
+  }, [setLayers]);
+
+  // Toggle visibility for a whole group: if any member is visible, hide them
+  // all; otherwise show them all.
+  const handleToggleGroupVisible = useCallback((gid) => {
+    setLayers(prev => {
+      const anyVisible = prev.some(l => l.groupId === gid && l.visible);
+      return prev.map(l => l.groupId === gid ? { ...l, visible: !anyVisible } : l);
+    });
+  }, [setLayers]);
+
+  const handleToggleGroupLock = useCallback((gid) => {
+    setLayers(prev => {
+      const anyUnlocked = prev.some(l => l.groupId === gid && !l.locked);
+      return prev.map(l => l.groupId === gid ? { ...l, locked: anyUnlocked } : l);
+    });
+  }, [setLayers]);
+
+  // Disband a group but keep its layers.
+  const handleUngroup = useCallback((gid) => {
+    setLayers(prev => prev.map(l => l.groupId === gid ? { ...l, groupId: undefined, groupName: undefined } : l));
+  }, [setLayers]);
+
+  // Delete a whole group. Locked members are protected and left behind.
+  const handleDeleteGroup = useCallback((gid) => {
+    setLayers(prev => prev.filter(l => !(l.groupId === gid && !l.locked)));
+    setSelectedId(prev => {
+      const sel = layers.find(l => l.id === prev);
+      return sel && sel.groupId === gid && !sel.locked ? null : prev;
+    });
+  }, [setLayers, layers]);
+
   const handleDelete = useCallback((id) => {
     let removed = false;
     setLayers(prev => {
@@ -702,6 +783,14 @@ export default function LiveryEditor() {
               onDuplicate={handleDuplicate}
               onMirror={handleMirror}
               onReorder={handleReorder}
+              onCreateGroup={handleCreateGroup}
+              onAddToGroup={handleAddToGroup}
+              onRemoveFromGroup={handleRemoveFromGroup}
+              onRenameGroup={handleRenameGroup}
+              onToggleGroupVisible={handleToggleGroupVisible}
+              onToggleGroupLock={handleToggleGroupLock}
+              onUngroup={handleUngroup}
+              onDeleteGroup={handleDeleteGroup}
             />
             </div>
 
