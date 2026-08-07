@@ -1,8 +1,8 @@
-import { Eye, EyeOff, Trash2, ChevronUp, ChevronDown, Copy, FlipHorizontal } from 'lucide-react';
+import { Eye, EyeOff, Trash2, ChevronUp, ChevronDown, Copy, FlipHorizontal, Lock, Unlock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisible, onDelete, onReorder, onDuplicate, onMirror }) {
+export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisible, onToggleLock, onDelete, onReorder, onDuplicate, onMirror }) {
   const reversedLayers = [...layers].reverse();
 
   return (
@@ -30,7 +30,10 @@ export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisib
               style={{ background: layer.colour }}
             />
             {/* label */}
-            <span className={cn('flex-1 truncate', !layer.visible && 'opacity-40')}>{layer.label}</span>
+            <span className={cn('flex-1 truncate flex items-center gap-1', !layer.visible && 'opacity-40')}>
+              {layer.locked && <Lock className="w-3 h-3 flex-shrink-0 text-primary" />}
+              <span className="truncate">{layer.label}</span>
+            </span>
             {/* reorder */}
             <Button
               variant="ghost" size="icon"
@@ -47,6 +50,17 @@ export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisib
               disabled={realIdx === 0}
             >
               <ChevronDown className="w-3 h-3" />
+            </Button>
+            {/* lock toggle */}
+            <Button
+              variant="ghost" size="icon"
+              className={cn('h-5 w-5', !layer.locked && 'opacity-0 group-hover:opacity-60 hover:!opacity-100')}
+              onClick={e => { e.stopPropagation(); onToggleLock(layer.id); }}
+              title={layer.locked ? 'Unlock layer' : 'Lock layer'}
+            >
+              {layer.locked
+                ? <Lock className="w-3 h-3 text-primary" />
+                : <Unlock className="w-3 h-3 text-muted-foreground" />}
             </Button>
             {/* visible toggle */}
             <Button
@@ -76,11 +90,13 @@ export default function LayerPanel({ layers, selectedId, onSelect, onToggleVisib
             >
               <FlipHorizontal className="w-3 h-3" />
             </Button>
-            {/* delete */}
+            {/* delete — disabled while locked so it can't be removed by accident */}
             <Button
               variant="ghost" size="icon"
-              className="h-5 w-5 hover:text-destructive"
+              className="h-5 w-5 hover:text-destructive disabled:opacity-30"
               onClick={e => { e.stopPropagation(); onDelete(layer.id); }}
+              disabled={layer.locked}
+              title={layer.locked ? 'Unlock to delete' : 'Delete'}
             >
               <Trash2 className="w-3 h-3 text-muted-foreground" />
             </Button>

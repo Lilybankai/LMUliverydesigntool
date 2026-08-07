@@ -99,6 +99,7 @@ export function createTextLayer(canvasWidth, canvasHeight) {
     colour2: '#FFFFFF',
     opacity: 1,
     visible: true,
+    locked: false,
     label: 'Text',
     ...TEXT_DEFAULTS,
   };
@@ -125,6 +126,7 @@ export function createLayer(shapeType, canvasWidth, canvasHeight) {
     colour2: '#FFFFFF',
     opacity: 1,
     visible: true,
+    locked: false,
     label: type?.label || shapeType,
   };
 }
