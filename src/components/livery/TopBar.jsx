@@ -101,20 +101,22 @@ export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseC
           disabled={!canUndo}
           variant="outline"
           size="sm"
-          className="h-8 w-8 p-0"
-          title="Undo (Ctrl+Z)"
+          className="h-8 px-2 gap-1.5"
+          title="Undo last change (Ctrl+Z)"
         >
           <Undo2 className="w-4 h-4" />
+          <span className="hidden sm:inline text-xs font-medium">Undo</span>
         </Button>
         <Button
           onClick={onRedo}
           disabled={!canRedo}
           variant="outline"
           size="sm"
-          className="h-8 w-8 p-0"
+          className="h-8 px-2 gap-1.5"
           title="Redo (Ctrl+Shift+Z)"
         >
           <Redo2 className="w-4 h-4" />
+          <span className="hidden sm:inline text-xs font-medium">Redo</span>
         </Button>
       </div>
 
