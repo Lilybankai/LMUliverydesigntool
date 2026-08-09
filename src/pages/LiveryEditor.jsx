@@ -53,6 +53,21 @@ import { RotateCcw, Lock } from 'lucide-react';
 // Flip to true to re-enable the free-export limit + subscription gate.
 const PAYWALL_ENABLED = false;
 
+// Reverse the in-design image de-duplication applied at save time: image layers
+// stored as `ref:<layerId>` point at the first layer that carries the real
+// bytes. Resolve each back to a usable imageUrl before the images are loaded.
+// Backward compatible — layers without a `ref:` URL pass through untouched.
+function resolveImageRefs(layers) {
+  const byId = new Map((layers || []).map((l) => [l.id, l]));
+  return (layers || []).map((layer) => {
+    if (layer.type === 'image' && typeof layer.imageUrl === 'string' && layer.imageUrl.startsWith('ref:')) {
+      const target = byId.get(layer.imageUrl.slice(4));
+      return { ...layer, imageUrl: target?.imageUrl || null };
+    }
+    return layer;
+  });
+}
+
 export default function LiveryEditor() {
   const [vehicleId, setVehicleId] = useState(VEHICLES[0].id);
   const [baseColour, setBaseColour] = useState('#1E6FA8');
@@ -395,9 +410,22 @@ export default function LiveryEditor() {
 
   const selectedLayer = layers.find(l => l.id === selectedId) || null;
 
-  // Strip non-serializable / transient fields from layers (e.g. cached _imgElement)
+  // Strip non-serializable / transient fields from layers (e.g. cached
+  // _imgElement) and de-duplicate repeated images: when several image layers
+  // share identical bytes (mirrors, tiled decals, the same logo placed twice),
+  // only the first keeps the data — the rest reference it via `ref:<layerId>`.
+  // resolveImageRefs() (below) reverses this on load. Zero visual change; it
+  // just avoids storing the same image many times in one design.
   const serializeLayers = useCallback((arr) => {
-    return arr.map(({ _imgElement, ...rest }) => rest);
+    const firstByUrl = new Map(); // imageUrl -> id of the layer that owns the bytes
+    return arr.map(({ _imgElement, ...rest }) => {
+      if (rest.type === 'image' && typeof rest.imageUrl === 'string' && !rest.imageUrl.startsWith('ref:')) {
+        const owner = firstByUrl.get(rest.imageUrl);
+        if (owner) return { ...rest, imageUrl: `ref:${owner}` };
+        firstByUrl.set(rest.imageUrl, rest.id);
+      }
+      return rest;
+    });
   }, []);
 
   // Login is required to reach the tool, so these are always available.
@@ -454,8 +482,9 @@ export default function LiveryEditor() {
   // Image layers are saved with their imageUrl but not the live HTMLImageElement
   // (_imgElement is stripped before saving). Rebuild that element from the URL so
   // drawShape has something to draw — otherwise loaded images render as blank.
+  // First resolve any de-duplicated `ref:` image URLs back to real bytes.
   const rehydrateImageLayers = useCallback((arr) => Promise.all(
-    (arr || []).map((layer) => {
+    resolveImageRefs(arr || []).map((layer) => {
       if (layer.type !== 'image' || !layer.imageUrl) return layer;
       return new Promise((resolve) => {
         const img = new Image();
