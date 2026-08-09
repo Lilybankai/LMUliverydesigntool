@@ -29,9 +29,24 @@ export default function MyDesignsDialog({ open, onOpenChange, onLoad }) {
 
   const vehicleName = (id) => VEHICLES.find(v => v.id === id)?.name || id;
 
+  const [loadingId, setLoadingId] = useState(null);
+
   const handleLoad = async (design) => {
-    await onLoad(design);
-    onOpenChange(false);
+    // The list is metadata-only, so fetch the full design (with layers) now.
+    setLoadingId(design.id);
+    try {
+      const full = await db.entities.SavedDesign.get(design.id);
+      await onLoad(full);
+      onOpenChange(false);
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Could not open design',
+        description: err?.message || 'Please try again.',
+      });
+    } finally {
+      setLoadingId(null);
+    }
   };
 
   const handleDelete = async (id) => {
@@ -111,17 +126,18 @@ export default function MyDesignsDialog({ open, onOpenChange, onLoad }) {
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm truncate">{d.name}</div>
                 <div className="text-xs text-muted-foreground truncate">
-                  {vehicleName(d.vehicleId)} • {(d.layers?.length || 0)} layers • {format(new Date(d.updated_date), 'MMM d, yyyy')}
+                  {vehicleName(d.vehicleId)} • {format(new Date(d.updated_date), 'MMM d, yyyy')}
                 </div>
               </div>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => handleLoad(d)}
+                disabled={loadingId === d.id}
                 className="gap-1.5"
               >
                 <Upload className="w-3.5 h-3.5" />
-                Load
+                {loadingId === d.id ? 'Loading…' : 'Load'}
               </Button>
               <Button
                 size="sm"
