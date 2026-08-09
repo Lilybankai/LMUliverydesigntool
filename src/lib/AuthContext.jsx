@@ -43,19 +43,29 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     let mounted = true;
 
+    // Failsafe: never let the initial auth check leave the app stuck on the
+    // loading spinner. Supabase's auth client serialises calls with the Web
+    // Locks API, and a frozen/backgrounded tab (common when lots of tabs are
+    // open, especially on mobile) can hold that lock so getSession() blocks
+    // indefinitely. If the check hasn't settled in a few seconds, drop to the
+    // unauthenticated state so the login screen shows instead of an endless
+    // spinner; a real session then recovers via onAuthStateChange.
+    const failsafe = setTimeout(() => {
+      if (!mounted) return;
+      setIsLoadingAuth(false);
+      setAuthChecked(true);
+    }, 8000);
+
     // Initial session check on mount.
     db.auth.isAuthenticated()
       .then(async (hasSession) => {
         if (!mounted) return;
-        if (hasSession) {
-          await loadUser();
-        } else {
-          setIsLoadingAuth(false);
-          setAuthChecked(true);
-        }
+        if (hasSession) await loadUser();
       })
-      .catch(() => {
+      .catch(() => { /* settled in finally */ })
+      .finally(() => {
         if (!mounted) return;
+        clearTimeout(failsafe);
         setIsLoadingAuth(false);
         setAuthChecked(true);
       });
@@ -91,7 +101,7 @@ export const AuthProvider = ({ children }) => {
       }
     });
 
-    return () => { mounted = false; unsubscribe?.(); };
+    return () => { mounted = false; clearTimeout(failsafe); unsubscribe?.(); };
   }, [loadUser]);
 
   // Finalize a pending marketing opt-in once the user is authenticated
