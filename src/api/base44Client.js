@@ -289,24 +289,34 @@ const adminApi = {
   // given window. Pass sinceISO = null for "all time".
   async fetchActivity(sinceISO) {
     const client = requireSupabase();
-    const build = (table, cols) => {
-      let q = client.from(table).select(cols);
-      if (sinceISO) q = q.gte('created_at', sinceISO);
-      return q;
+    // PostgREST caps a single response at 1000 rows, so a plain select silently
+    // truncates once a table passes that — which made the dashboard under-count
+    // (e.g. downloads reading as ~0 even with thousands of events). Page through
+    // in 1000-row batches so every metric is computed from the complete set.
+    const PAGE = 1000;
+    const fetchAll = async (table, cols) => {
+      const rows = [];
+      for (let from = 0; ; from += PAGE) {
+        let q = client
+          .from(table)
+          .select(cols)
+          .order('created_at', { ascending: true })
+          .range(from, from + PAGE - 1);
+        if (sinceISO) q = q.gte('created_at', sinceISO);
+        const { data, error } = await q;
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < PAGE) break;
+      }
+      return rows;
     };
-    const [profiles, designs, events] = await Promise.all([
-      build('profiles', 'id, email, created_at'),
-      build('saved_designs', 'created_at'),
-      build('analytics_events', 'user_id, created_at, event_name, properties'),
+
+    const [signups, saves, events] = await Promise.all([
+      fetchAll('profiles', 'id, email, created_at'),
+      fetchAll('saved_designs', 'created_at'),
+      fetchAll('analytics_events', 'user_id, created_at, event_name, properties'),
     ]);
-    if (profiles.error) throw profiles.error;
-    if (designs.error) throw designs.error;
-    if (events.error) throw events.error;
-    return {
-      signups: profiles.data || [],
-      saves: designs.data || [],
-      events: events.data || [],
-    };
+    return { signups, saves, events };
   },
 };
 
