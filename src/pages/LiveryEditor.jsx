@@ -770,7 +770,7 @@ export default function LiveryEditor() {
 
         {/* Right panel — layers + properties */}
         <aside className="w-80 flex-shrink-0 border-l border-border bg-card flex flex-col overflow-hidden">
-          <ScrollArea className="flex-1 p-2">
+          <ScrollArea className="flex-1 p-2 [&_[data-radix-scroll-area-viewport]>div]:!block">
             <div data-tutorial="layers">
             <LayerPanel
               layers={layers}
