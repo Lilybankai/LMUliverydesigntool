@@ -114,15 +114,33 @@ const savedDesignEntity = {
     // Always scope "My Designs" to the current user. Admins have an RLS policy
     // that can read every row, so we must filter explicitly here — otherwise an
     // admin's own list would return everyone's designs (and blow past the limit).
+    // Metadata only — never pull the (large) `layers` JSON here. Listing designs
+    // must not download every design's embedded images; that read pattern was
+    // the main driver of PostgREST egress. The full row (with layers) is fetched
+    // via get() only when a design is actually opened.
     let query = client
       .from('saved_designs')
-      .select('*')
+      .select('id, name, vehicle_id, base_colour, custom_colour, base_opacity, created_at, updated_at')
       .eq('user_id', user.id)
       .order(column, { ascending });
     if (limit) query = query.limit(limit);
     const { data, error } = await query;
     if (error) throw error;
     return (data || []).map(mapSavedDesign);
+  },
+
+  // Fetch a single design in full (including layers), scoped to the owner.
+  async get(id) {
+    const client = requireSupabase();
+    const user = await getCurrentUser();
+    const { data, error } = await client
+      .from('saved_designs')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single();
+    if (error) throw error;
+    return mapSavedDesign(data);
   },
 
   async create(payload) {
