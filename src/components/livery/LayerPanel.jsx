@@ -97,7 +97,7 @@ export default function LayerPanel({
           />
         ) : (
           <span
-            className={cn('flex-1 truncate flex items-center gap-1', !layer.visible && 'opacity-40')}
+            className={cn('flex-1 min-w-0 truncate flex items-center gap-1', !layer.visible && 'opacity-40')}
             onDoubleClick={e => { e.stopPropagation(); startRename(layer.id, layer.label); }}
             title="Double-click to rename"
           >
@@ -228,7 +228,7 @@ export default function LayerPanel({
             />
           ) : (
             <span
-              className="flex-1 truncate font-semibold"
+              className="flex-1 min-w-0 truncate font-semibold"
               onDoubleClick={() => startRename(`group:${gid}`, name)}
               title="Double-click to rename group"
             >
