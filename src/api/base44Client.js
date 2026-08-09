@@ -336,6 +336,32 @@ const adminApi = {
     ]);
     return { signups, saves, events };
   },
+
+  // Fetch one page of design rows (id + layers) across ALL users for the
+  // storage-optimisation migration. Admin RLS allows reading every row. Small
+  // page size because each row's layers can be large (embedded images).
+  async fetchDesignsPage(offset, pageSize = 25) {
+    const client = requireSupabase();
+    const { data, error } = await client
+      .from('saved_designs')
+      .select('id, layers')
+      .order('created_at', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Overwrite a design's layers by id (admin-only; requires the
+  // "Admins can update all saved designs" policy). Used by the migration.
+  async setDesignLayers(id, layers) {
+    const client = requireSupabase();
+    const { error } = await client
+      .from('saved_designs')
+      .update({ layers })
+      .eq('id', id);
+    if (error) throw error;
+    return {};
+  },
 };
 
 export const db = {

@@ -9,13 +9,14 @@ import {
 } from 'date-fns';
 import {
   Users, Layers, Download, Eye, Lightbulb, RefreshCw, ArrowLeft, MessageSquare,
-  ChevronRight, Car, Reply, Send, Check, CheckCheck,
+  ChevronRight, Car, Reply, Send, Check, CheckCheck, HardDrive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { base44 as db } from '@/api/base44Client';
+import { optimizeDesignLayers } from '@/lib/optimizeImages';
 import { useToast } from '@/components/ui/use-toast';
 
 const RANGES = [
@@ -108,6 +109,52 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedUser, setExpandedUser] = useState(null);
+
+  // One-time storage optimisation: re-compress every design's images to WebP
+  // (and de-dup) to reclaim database space. Runs in the admin's browser.
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeDone, setOptimizeDone] = useState(0);
+  const [optimizeResult, setOptimizeResult] = useState(null);
+
+  const runOptimize = useCallback(async () => {
+    if (optimizing) return;
+    if (!window.confirm('Re-compress all saved designs to reclaim database space?\n\nThis runs in your browser and may take a few minutes. It only shrinks designs (never changes how they look) and is safe to re-run.')) return;
+    setOptimizing(true);
+    setOptimizeResult(null);
+    setOptimizeDone(0);
+    let processed = 0, updated = 0, savedBytes = 0, errors = 0;
+    try {
+      const PAGE = 25;
+      for (let offset = 0; ; offset += PAGE) {
+        const rows = await db.admin.fetchDesignsPage(offset, PAGE);
+        if (!rows.length) break;
+        for (const row of rows) {
+          processed++;
+          try {
+            const { layers, before, after } = await optimizeDesignLayers(row.layers || []);
+            if (after < before) {
+              await db.admin.setDesignLayers(row.id, layers);
+              updated++;
+              savedBytes += before - after;
+            }
+          } catch {
+            errors++;
+          }
+          setOptimizeDone(processed);
+        }
+        if (rows.length < PAGE) break;
+      }
+      setOptimizeResult({ processed, updated, savedBytes, errors });
+      toast({
+        title: 'Storage optimised',
+        description: `${updated}/${processed} designs shrunk · ~${(savedBytes / 1048576).toFixed(1)} MB of image data reclaimed.`,
+      });
+    } catch (err) {
+      toast({ variant: 'destructive', title: 'Optimise failed', description: err?.message || 'Please try again.' });
+    } finally {
+      setOptimizing(false);
+    }
+  }, [optimizing, toast]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -290,6 +337,32 @@ export default function AdminDashboard() {
                   </LineChart>
                 </ResponsiveContainer>
               )}
+            </div>
+
+            <div className="bg-card border border-border rounded-lg p-4 mt-4">
+              <h2 className="text-sm font-rajdhani uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-2">
+                <HardDrive className="w-4 h-4" /> Storage
+              </h2>
+              <p className="text-xs text-muted-foreground mb-3">
+                Re-compress existing designs' images to WebP and de-duplicate them, reclaiming database
+                space. Runs in your browser and never changes how a livery looks. Safe to re-run.
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <Button size="sm" variant="outline" onClick={runOptimize} disabled={optimizing} className="gap-1.5">
+                  <HardDrive className="w-3.5 h-3.5" />
+                  {optimizing ? 'Optimising…' : 'Optimise storage'}
+                </Button>
+                {optimizing && (
+                  <span className="text-xs text-muted-foreground">{optimizeDone} designs processed…</span>
+                )}
+                {optimizeResult && !optimizing && (
+                  <span className="text-xs text-muted-foreground">
+                    {optimizeResult.updated}/{optimizeResult.processed} shrunk · ~
+                    {(optimizeResult.savedBytes / 1048576).toFixed(1)} MB reclaimed
+                    {optimizeResult.errors ? ` · ${optimizeResult.errors} skipped` : ''}
+                  </span>
+                )}
+              </div>
             </div>
           </TabsContent>
 
