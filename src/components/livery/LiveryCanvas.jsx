@@ -46,6 +46,10 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
   const canvasRef = useRef(null);
   const uvImageRef = useRef(null);
   const stickersImageRef = useRef(null);
+  const bodyMaskRef = useRef(null);
+  // Cached base-colour plate, already clipped to the body mask. Rebuilt only when the
+  // vehicle or colour changes, so the 4K masking pass never runs on a redraw.
+  const basePlateRef = useRef({ canvas: null, key: null });
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -56,6 +60,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
   const [hoverCursor, setHoverCursor] = useState('crosshair');
   const [uvLoaded, setUvLoaded] = useState(false);
   const [stickersLoaded, setStickersLoaded] = useState(false);
+  const [maskLoaded, setMaskLoaded] = useState(0);
   const [fontTick, setFontTick] = useState(0);
 
   // Re-render the canvas whenever a new web font finishes loading
@@ -92,6 +97,18 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
     img.onload = () => { uvImageRef.current = img; setUvLoaded(true); };
     img.src = vehicle.uvMap;
   }, [vehicle.uvMap]);
+
+  useEffect(() => {
+    bodyMaskRef.current = null;
+    basePlateRef.current = { canvas: null, key: null };
+    if (!vehicle.bodyMask) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    // A missing mask is not an error: the canvas falls back to filling the whole
+    // texture, which is exactly the old behaviour.
+    img.onload = () => { bodyMaskRef.current = img; setMaskLoaded((n) => n + 1); };
+    img.src = vehicle.bodyMask;
+  }, [vehicle.bodyMask]);
 
   useEffect(() => {
     setStickersLoaded(false);
@@ -136,8 +153,28 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
     if (baseOpacity > 0) {
       ctx.save();
       ctx.globalAlpha = baseOpacity;
-      ctx.fillStyle = baseColour;
-      ctx.fillRect(0, 0, W, H);
+
+      const mask = bodyMaskRef.current;
+      if (mask) {
+        // Paint the colour only inside the car's panels, leaving the surround dark.
+        const key = `${vehicle.id}|${baseColour}|${W}x${H}`;
+        if (basePlateRef.current.key !== key) {
+          const plate = document.createElement('canvas');
+          plate.width = W;
+          plate.height = H;
+          const pctx = plate.getContext('2d');
+          pctx.fillStyle = baseColour;
+          pctx.fillRect(0, 0, W, H);
+          pctx.globalCompositeOperation = 'destination-in';
+          pctx.drawImage(mask, 0, 0, W, H);
+          basePlateRef.current = { canvas: plate, key };
+        }
+        ctx.drawImage(basePlateRef.current.canvas, 0, 0);
+      } else {
+        // No mask available for this vehicle — fill the whole texture as before.
+        ctx.fillStyle = baseColour;
+        ctx.fillRect(0, 0, W, H);
+      }
       ctx.restore();
     }
 
@@ -226,7 +263,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
         }
       }
     }
-  }, [layers, baseColour, baseOpacity, selectedId, uvVisible, uvLoaded, stickersVisible, stickersLoaded, scale, fontTick]);
+  }, [layers, baseColour, baseOpacity, selectedId, uvVisible, uvLoaded, stickersVisible, stickersLoaded, maskLoaded, scale, fontTick]);
 
   // Zoom centred on a point (container-relative px coords)
   const applyZoom = useCallback((factor, originX, originY) => {

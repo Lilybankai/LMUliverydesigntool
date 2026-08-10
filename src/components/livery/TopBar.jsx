@@ -1,17 +1,64 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Download, Layers, FolderOpen, Copy, CheckCheck, ChevronDown, Undo2, Redo2, Save, LogOut, User as UserIcon, Lightbulb, LayoutDashboard } from 'lucide-react';
-import { VEHICLES, BASE_COLOURS } from '@/lib/vehicles';
+import { BASE_COLOURS, CLASS_ORDER, VEHICLES, vehiclesByClass } from '@/lib/vehicles';
 import { TutorialButton } from './InteractiveTutorial';
 
 const INSTALL_PATH = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\UserData\\Liveries';
+
+const ALL_CLASSES = 'all';
+
+/**
+ * Championship colour coding. Only LMP2 ships both variants, but the same cue is used
+ * everywhere it applies so the ELMS/WEC distinction is readable at a glance rather
+ * than relying on the "(WEC)" / "(ELMS)" suffix in the name.
+ */
+const SERIES_STYLE = {
+  WEC: { text: 'text-sky-400', dot: 'bg-sky-400' },
+  ELMS: { text: 'text-amber-400', dot: 'bg-amber-400' },
+};
+
+function SeriesBadge({ series }) {
+  const style = SERIES_STYLE[series];
+  if (!style) return null;
+  return (
+    <span className={`ml-auto pl-2 flex items-center gap-1.5 text-[9px] font-semibold tracking-wider ${style.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+      {series}
+    </span>
+  );
+}
 
 export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseColourChange, customColour, onCustomColourChange, onExport, onStartTutorial, onUndo, onRedo, canUndo, canRedo, onSaveDesign, onOpenMyDesigns, onOpenSuggestions, isAdmin, isAuthenticated, user, onLogout }) {
   const [installOpen, setInstallOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [designsOpen, setDesignsOpen] = useState(false);
+
+  const currentVehicle = VEHICLES.find((v) => v.id === vehicleId) || VEHICLES[0];
+  const [classFilter, setClassFilter] = useState(currentVehicle.class || ALL_CLASSES);
+
+  // Follow the vehicle when it changes elsewhere (loading a saved design), so the
+  // class dropdown never disagrees with the car actually on the canvas.
+  useEffect(() => {
+    const v = VEHICLES.find((x) => x.id === vehicleId);
+    if (v?.class) setClassFilter(v.class);
+  }, [vehicleId]);
+
+  const groups = vehiclesByClass();
+  const classes = CLASS_ORDER.filter((c) => groups.some((g) => g.cls === c));
+  const visibleGroups = classFilter === ALL_CLASSES ? groups : groups.filter((g) => g.cls === classFilter);
+
+  const handleClassChange = (cls) => {
+    setClassFilter(cls);
+    if (cls === ALL_CLASSES) return;
+    // Jump to the first car in the chosen class. Skipped when the current car is
+    // already in it, because switching vehicle clears the canvas.
+    if (currentVehicle.class === cls) return;
+    const first = groups.find((g) => g.cls === cls)?.vehicles?.[0];
+    if (first) onVehicleChange(first.id);
+  };
 
   const handleCopy = () => {
     navigator.clipboard.writeText(INSTALL_PATH);
@@ -37,16 +84,50 @@ export default function TopBar({ vehicleId, onVehicleChange, baseColour, onBaseC
 
       <div className="w-px h-6 bg-border mx-1" />
 
+      {/* Class filter */}
+      <div data-tutorial="vehicle-class" className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">Class</span>
+        <Select value={classFilter} onValueChange={handleClassChange}>
+          <SelectTrigger className="h-8 text-xs w-32 bg-secondary border-border">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_CLASSES} className="text-xs">All classes</SelectItem>
+            {classes.map((c) =>
+            <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Vehicle selector */}
       <div data-tutorial="vehicle" className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground whitespace-nowrap">Vehicle</span>
         <Select value={vehicleId} onValueChange={onVehicleChange}>
-          <SelectTrigger className="h-8 text-xs w-52 bg-secondary border-border">
-            <SelectValue />
+          <SelectTrigger className="h-8 text-xs w-56 bg-secondary border-border">
+            {/* Rendered explicitly rather than via <SelectValue/>: the current car can
+                sit outside the active class filter, which would leave the trigger blank. */}
+            <SelectValue>
+              <span className="flex items-center w-full">
+                <span className={SERIES_STYLE[currentVehicle.series]?.text ?? ''}>{currentVehicle.name}</span>
+              </span>
+            </SelectValue>
           </SelectTrigger>
-          <SelectContent>
-            {VEHICLES.map((v) =>
-            <SelectItem key={v.id} value={v.id} className="text-xs">{v.name}</SelectItem>
+          <SelectContent className="max-h-[70vh]">
+            {visibleGroups.map(({ cls, vehicles }) =>
+            <SelectGroup key={cls}>
+                {classFilter === ALL_CLASSES &&
+              <SelectLabel className="text-[10px] uppercase tracking-wider text-muted-foreground">{cls}</SelectLabel>
+              }
+                {vehicles.map((v) =>
+              <SelectItem key={v.id} value={v.id} className="text-xs">
+                    <span className="flex items-center w-full min-w-[13rem]">
+                      <span className={SERIES_STYLE[v.series]?.text ?? ''}>{v.name}</span>
+                      <SeriesBadge series={v.series} />
+                    </span>
+                  </SelectItem>
+              )}
+              </SelectGroup>
             )}
           </SelectContent>
         </Select>

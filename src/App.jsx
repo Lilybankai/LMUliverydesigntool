@@ -6,7 +6,7 @@ import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { isAdminEmail } from '@/lib/admin';
-import { base44 as db } from '@/api/base44Client';
+import { base44 as db, supabase } from '@/api/base44Client';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LoginGate from '@/components/livery/LoginGate';
 import ReplyNotificationDialog from '@/components/livery/ReplyNotificationDialog';
@@ -14,6 +14,14 @@ import ReplyNotificationDialog from '@/components/livery/ReplyNotificationDialog
 import LiveryEditor from './pages/LiveryEditor';
 import ThankYou from './pages/ThankYou';
 import AdminDashboard from './pages/AdminDashboard';
+
+/**
+ * With no Supabase URL/key there is no login that can possibly succeed, so the gate
+ * would only block the editor behind a dead button. Fall through to the tool instead.
+ * This is self-limiting: any build with credentials configured gates normally, so it
+ * cannot weaken a real deployment.
+ */
+const AUTH_DISABLED = !supabase;
 
 const AdminRoute = () => {
   const { user } = useAuth();
@@ -46,7 +54,7 @@ const AuthenticatedApp = () => {
   }
 
   // Require login before the tool is usable.
-  if (!isAuthenticated) {
+  if (!isAuthenticated && !AUTH_DISABLED) {
     return <LoginGate />;
   }
 
