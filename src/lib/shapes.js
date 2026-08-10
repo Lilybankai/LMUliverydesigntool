@@ -1267,6 +1267,12 @@ export function createFreeformLayer(points) {
     edges: DEFAULT_EDGES.map(e => ({ ...e })),
     fillType: 'solid',   // 'solid' | 'pattern'
     patternType: null,   // a pat_* / tex_* id when fillType === 'pattern'
+    // Pattern transform inside the area — independent scale / rotation / offset,
+    // since (unlike a normal pattern layer) there's no rectangle box to resize.
+    patternScale: 1,
+    patternRotation: 0,
+    patternOffsetX: 0,
+    patternOffsetY: 0,
     colour: '#E63946',
     colour2: '#FFFFFF',
     opacity: 1,
@@ -1275,6 +1281,11 @@ export function createFreeformLayer(points) {
     label: 'Area',
   };
 }
+
+// The base tile size (canvas px) a freeform pattern is rendered at when
+// patternScale === 1. Feature sizes are a fraction of this, so a checkerboard is
+// ~64px squares at scale 1 regardless of how big the drawn area is.
+const FREEFORM_PATTERN_TILE = 512;
 
 function traceFreeformPath(ctx, points) {
   ctx.beginPath();
@@ -1288,24 +1299,53 @@ function drawFreeform(ctx, layer) {
   if (!points || points.length < 3) return;
   const bbox = freeformBBox(points);
 
-  // Pattern / texture fill — clip to the polygon, then let the existing pattern
-  // renderer paint across the polygon's bounding box.
+  // Pattern / texture fill — render the pattern into a repeating tile, then paint
+  // it through the polygon clip with an independent scale / rotation / offset. The
+  // clip is set before the transform, so only the pattern moves, not the area.
   if (layer.fillType === 'pattern' && layer.patternType) {
     const fn = PATTERN_MAP[layer.patternType] || TEXTURE_MAP[layer.patternType];
     if (fn) {
-      ctx.save();
-      traceFreeformPath(ctx, points);
-      ctx.clip();
-      const sub = {
+      const T = FREEFORM_PATTERN_TILE;
+      const tile = document.createElement('canvas');
+      tile.width = T;
+      tile.height = T;
+      const tctx = tile.getContext('2d');
+      // Draw one tile of the pattern at full opacity; the area's opacity is
+      // applied once on the final fill below.
+      fn(tctx, {
         ...layer,
         type: layer.patternType,
-        x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height,
+        x: 0, y: 0, width: T, height: T,
         rotation: 0, skewX: 0, flipX: false, flipY: false,
         corners: DEFAULT_CORNERS, edges: DEFAULT_EDGES,
-      };
-      fn(ctx, sub);
-      ctx.restore();
-      return;
+        opacity: 1,
+      });
+      const pat = ctx.createPattern(tile, 'repeat');
+      if (pat) {
+        const S = Math.max(0.05, layer.patternScale || 1);
+        const rot = ((layer.patternRotation || 0) * Math.PI) / 180;
+        const ox = layer.patternOffsetX || 0;
+        const oy = layer.patternOffsetY || 0;
+        const cx = bbox.x + bbox.width / 2;
+        const cy = bbox.y + bbox.height / 2;
+
+        ctx.save();
+        traceFreeformPath(ctx, points);
+        ctx.clip();
+        ctx.globalAlpha = layer.opacity;
+        // Pattern anchored to the transformed space, so it scales/rotates/pans.
+        ctx.translate(cx + ox, cy + oy);
+        ctx.rotate(rot);
+        ctx.scale(S, S);
+        ctx.fillStyle = pat;
+        // Cover the whole polygon in this transformed space: the area lies within
+        // radius r of its centre, plus the offset, all divided by the scale.
+        const r = Math.hypot(bbox.width, bbox.height) / 2;
+        const cover = (r + Math.hypot(ox, oy) + 100) / S;
+        ctx.fillRect(-cover, -cover, cover * 2, cover * 2);
+        ctx.restore();
+        return;
+      }
     }
   }
 

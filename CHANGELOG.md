@@ -14,6 +14,10 @@ All notable changes to the LMU Livery Design Tool.
   shape to move it, drag the blue dots to reshape individual points, and duplicate, lock
   or delete it from the Layers panel. This is the answer to "I want to select an area and
   just change its colour" without having to warp a rectangular pattern to fit.
+  - **Pattern transform inside an area.** When you fill a drawn area with a pattern or
+    texture you now get independent **Scale**, **Rotation** and **Offset X/Y** controls,
+    so you can size and angle the pattern within the area rather than being locked to the
+    area's outline — the equivalent of resizing/rotating a normal pattern layer.
 - **19 new cars, taking the roster from 10 to 29.** Every class in Le Mans Ultimate is
   now covered.
   - **Hypercar (13)** — Ferrari 499P, Toyota GR010 Hybrid, Porsche 963, Cadillac

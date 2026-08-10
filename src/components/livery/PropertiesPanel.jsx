@@ -147,6 +147,73 @@ export default function PropertiesPanel({ layer, onChange }) {
           </div>
         )}
 
+        {/* Pattern transform — scale / rotate / pan the pattern inside the area */}
+        {isPatternFill && (
+          <div className="flex flex-col gap-3 bg-secondary/20 rounded-md p-2">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-rajdhani">Pattern Transform</p>
+              <button
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => onChange({ ...layer, patternScale: 1, patternRotation: 0, patternOffsetX: 0, patternOffsetY: 0 })}
+              >
+                Reset
+              </button>
+            </div>
+
+            {/* Scale */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between">
+                <Label className="text-xs">Scale</Label>
+                <span className="text-xs text-muted-foreground">{(layer.patternScale ?? 1).toFixed(2)}×</span>
+              </div>
+              <Slider
+                min={0.1} max={4} step={0.05}
+                value={[layer.patternScale ?? 1]}
+                onValueChange={([v]) => update('patternScale', v)}
+              />
+            </div>
+
+            {/* Rotation */}
+            <div className="flex flex-col gap-1">
+              <div className="flex justify-between">
+                <Label className="text-xs">Rotation</Label>
+                <span className="text-xs text-muted-foreground">{Math.round(layer.patternRotation ?? 0)}°</span>
+              </div>
+              <Slider
+                min={-180} max={180} step={1}
+                value={[layer.patternRotation ?? 0]}
+                onValueChange={([v]) => update('patternRotation', v)}
+              />
+            </div>
+
+            {/* Offset X / Y */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Offset X</Label>
+                  <span className="text-[10px] text-muted-foreground">{Math.round(layer.patternOffsetX ?? 0)}</span>
+                </div>
+                <Slider
+                  min={-1000} max={1000} step={5}
+                  value={[layer.patternOffsetX ?? 0]}
+                  onValueChange={([v]) => update('patternOffsetX', v)}
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex justify-between">
+                  <Label className="text-xs">Offset Y</Label>
+                  <span className="text-[10px] text-muted-foreground">{Math.round(layer.patternOffsetY ?? 0)}</span>
+                </div>
+                <Slider
+                  min={-1000} max={1000} step={5}
+                  value={[layer.patternOffsetY ?? 0]}
+                  onValueChange={([v]) => update('patternOffsetY', v)}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Colours */}
         <ColourField
           label={isPatternFill ? 'Colour 1' : 'Colour'}
