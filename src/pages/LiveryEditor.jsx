@@ -21,7 +21,7 @@ const ADS = [
   { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/90c3ae6dd_Screenshot2026-05-23112456.png', linkUrl: 'https://my.trophi.ai/get-trophi?via=scot', title: 'Trophi.ai - Get Faster in Less Time' },
   { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/946d6eb87_Screenshot2026-05-23112406.png', linkUrl: 'https://my.trophi.ai/get-trophi?via=scot', title: 'Trophi.ai - Champions are Made Here' },
 ];
-import { createLayer, createTextLayer, drawShape } from '@/lib/shapes';
+import { createLayer, createTextLayer, createFreeformLayer, drawShape } from '@/lib/shapes';
 import { exportCanvasAsTga } from '@/lib/exportTga';
 import { loadImageFile } from '@/lib/importImage';
 import TopBar from '@/components/livery/TopBar';
@@ -102,6 +102,8 @@ export default function LiveryEditor() {
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [toolbarGroup, setToolbarGroup] = useState(null);
   const [canvasDragging, setCanvasDragging] = useState(false);
+  // Area-fill tool: when active the canvas is in freeform-draw mode.
+  const [areaDrawing, setAreaDrawing] = useState(false);
 
   // Auto-show tutorial on first visit
   useEffect(() => {
@@ -194,6 +196,26 @@ export default function LiveryEditor() {
     });
     setSelectedId(layer.id);
   }, [vehicle, setLayers, nextLabel]);
+
+  // Enter freeform area-draw mode. Deselect first so the drawing overlay is clear.
+  const handleStartAreaDraw = useCallback(() => {
+    setSelectedId(null);
+    setAreaDrawing(true);
+  }, []);
+
+  // Finish drawing an area → turn the outline into a fillable freeform layer.
+  const handleFinishDraw = useCallback((points) => {
+    setAreaDrawing(false);
+    if (!points || points.length < 3) return;
+    const layer = createFreeformLayer(points);
+    setLayers(prev => {
+      layer.label = nextLabel('Area', prev);
+      return [...prev, layer];
+    });
+    setSelectedId(layer.id);
+  }, [setLayers, nextLabel]);
+
+  const handleCancelDraw = useCallback(() => setAreaDrawing(false), []);
 
   // Normal layer change — commits to history (used by properties panel, etc.)
   const handleLayerChange = useCallback((updated) => {
@@ -333,6 +355,10 @@ export default function LiveryEditor() {
         edges: (src.edges || [{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0},{dx:0,dy:0}]).map(e => ({ ...e })),
         label: nextLabel(base, prev),
       };
+      // Freeform layers carry their geometry in `points`, not x/y — offset those too.
+      if (src.type === 'freeform' && Array.isArray(src.points)) {
+        copy.points = src.points.map(p => ({ x: p.x + 30, y: p.y + 30 }));
+      }
       const arr = [...prev];
       arr.splice(idx + 1, 0, copy);
       return arr;
@@ -681,6 +707,8 @@ export default function LiveryEditor() {
             <Toolbar
               onAddShape={handleAddShape}
               onAddText={handleAddText}
+              onStartAreaDraw={handleStartAreaDraw}
+              areaDrawing={areaDrawing}
               openGroup={toolbarGroup}
               onOpenGroupChange={setToolbarGroup}
             />
@@ -794,6 +822,9 @@ export default function LiveryEditor() {
           uvVisible={uvVisible}
           stickersVisible={stickersVisible}
           guidesVisible={guidesVisible}
+          drawMode={areaDrawing}
+          onFinishDraw={handleFinishDraw}
+          onCancelDraw={handleCancelDraw}
         />
         </div>
 

@@ -7,6 +7,10 @@ import { RotateCcw, RotateCw, FlipHorizontal2, FlipVertical2, ChevronUp, Chevron
 import HoldButton from './HoldButton';
 import TextEditorPanel from './TextEditorPanel';
 import GradientPanel from './GradientPanel';
+import { SHAPE_TYPES } from '@/lib/shapes';
+
+// Pattern & texture options offered as fills for a freeform area.
+const AREA_FILL_OPTIONS = SHAPE_TYPES.filter(s => s.group === 'patterns' || s.group === 'textures');
 
 // Split a colour string into its solid #rrggbb part and a 0..1 alpha. Handles
 // #rgb, #rrggbb and #rrggbbaa; anything else (named colours) is treated as
@@ -85,6 +89,103 @@ export default function PropertiesPanel({ layer, onChange }) {
   const isPatternOrTexture = layer.type?.startsWith('pat_') || layer.type?.startsWith('tex_');
   const nudge = (dx, dy) => onChange({ ...layer, x: layer.x + dx, y: layer.y + dy });
   const dpadBtn = "w-7 h-7 flex items-center justify-center rounded bg-secondary hover:bg-primary hover:text-primary-foreground transition-colors select-none";
+
+  // ── Freeform area — its own compact editor (fill + colours + opacity) ──────
+  if (layer.type === 'freeform') {
+    const isPatternFill = layer.fillType === 'pattern';
+    const setFillMode = (mode) => {
+      if (mode === 'pattern') {
+        onChange({ ...layer, fillType: 'pattern', patternType: layer.patternType || AREA_FILL_OPTIONS[0].id });
+      } else {
+        onChange({ ...layer, fillType: 'solid' });
+      }
+    };
+    return (
+      <div className="flex flex-col gap-4 p-1">
+        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-rajdhani">Area Fill</p>
+
+        {/* Fill mode: solid colour vs pattern/texture */}
+        <div className="flex gap-1">
+          <Button
+            variant={!isPatternFill ? 'default' : 'outline'}
+            size="sm"
+            className={`flex-1 h-7 text-[11px] ${!isPatternFill ? 'bg-primary text-primary-foreground' : ''}`}
+            onClick={() => setFillMode('solid')}
+          >
+            Solid
+          </Button>
+          <Button
+            variant={isPatternFill ? 'default' : 'outline'}
+            size="sm"
+            className={`flex-1 h-7 text-[11px] ${isPatternFill ? 'bg-primary text-primary-foreground' : ''}`}
+            onClick={() => setFillMode('pattern')}
+          >
+            Pattern
+          </Button>
+        </div>
+
+        {/* Pattern / texture picker */}
+        {isPatternFill && (
+          <div className="flex flex-col gap-1.5">
+            <Label className="text-xs">Pattern / Texture</Label>
+            <select
+              value={layer.patternType || ''}
+              onChange={e => update('patternType', e.target.value)}
+              className="h-8 rounded-md border border-border bg-background px-2 text-xs"
+            >
+              <optgroup label="Patterns">
+                {AREA_FILL_OPTIONS.filter(o => o.group === 'patterns').map(o => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Textures">
+                {AREA_FILL_OPTIONS.filter(o => o.group === 'textures').map(o => (
+                  <option key={o.id} value={o.id}>{o.label}</option>
+                ))}
+              </optgroup>
+            </select>
+          </div>
+        )}
+
+        {/* Colours */}
+        <ColourField
+          label={isPatternFill ? 'Colour 1' : 'Colour'}
+          value={layer.colour}
+          fallback="#E63946"
+          onChange={v => update('colour', v)}
+        />
+        {isPatternFill && (
+          <ColourField
+            label="Colour 2"
+            value={layer.colour2 || '#FFFFFF'}
+            fallback="#FFFFFF"
+            onChange={v => update('colour2', v)}
+          />
+        )}
+
+        {/* Gradient (solid fill only) */}
+        {!isPatternFill && <GradientPanel layer={layer} onChange={onChange} />}
+
+        {/* Opacity */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex justify-between">
+            <Label className="text-xs">Opacity</Label>
+            <span className="text-xs text-muted-foreground">{Math.round(layer.opacity * 100)}%</span>
+          </div>
+          <Slider
+            min={0} max={1} step={0.001}
+            value={[layer.opacity]}
+            onValueChange={([v]) => update('opacity', v)}
+          />
+        </div>
+
+        <p className="text-[11px] text-muted-foreground leading-snug border-t border-border pt-3">
+          Drag the area to move it, or drag the blue dots to reshape it. Use the
+          Layers panel to duplicate, lock, or delete it.
+        </p>
+      </div>
+    );
+  }
 
   // Resize keeping the visual centre fixed
   const resize = (key, val) => {

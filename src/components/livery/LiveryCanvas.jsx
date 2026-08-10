@@ -2,13 +2,14 @@ const db = globalThis.__B44_DB__ || { auth:{ isAuthenticated: async()=>false, me
 
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { Plus, Minus, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
-import { drawShape, hitTest, getLayerCornerPoints, getLayerEdgePoints, storedHandleIndex, DEFAULT_CORNERS, DEFAULT_EDGES } from '@/lib/shapes';
+import { drawShape, hitTest, getLayerCornerPoints, getLayerEdgePoints, storedHandleIndex, pointInPolygon, withFreeformBBox, DEFAULT_CORNERS, DEFAULT_EDGES } from '@/lib/shapes';
 import { loadGoogleFont } from '@/lib/googleFonts';
 import CanvasTips from './CanvasTips';
 
 const UV_OPACITY = 0.5;
 const CORNER_HANDLE_RADIUS = 18;
 const EDGE_HANDLE_RADIUS = 14;
+const VERTEX_HANDLE_RADIUS = 14;
 
 function hitTestPoint(pts, x, y, threshold) {
   for (let i = 0; i < pts.length; i++) {
@@ -41,7 +42,7 @@ const MIN_ZOOM = 0.1;
 const MAX_ZOOM = 5;
 const PAN_STEP = 50;
 
-export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, layers, selectedId, onSelect, onLayerChange, onLayerCommit, uvVisible, stickersVisible, guidesVisible = false }) {
+export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, layers, selectedId, onSelect, onLayerChange, onLayerCommit, uvVisible, stickersVisible, guidesVisible = false, drawMode = false, onFinishDraw, onCancelDraw }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const uvImageRef = useRef(null);
@@ -58,6 +59,53 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
   const [cornerDrag, setCornerDrag] = useState(null);
   const [panning, setPanning] = useState(null);
   const [hoverCursor, setHoverCursor] = useState('crosshair');
+
+  // ── Area-draw (freeform selection) state ──────────────────────────────────
+  // `draft` holds the in-progress polygon points (canvas coords). A ref mirror is
+  // kept so the mouse handlers always read the latest points synchronously.
+  const [draft, setDraft] = useState([]);
+  const draftRef = useRef([]);
+  const [draftCursor, setDraftCursor] = useState(null); // rubber-band end point
+  const gestureRef = useRef(null); // tracks a click-vs-freehand mouse gesture
+  const commitDraft = useCallback((next) => {
+    draftRef.current = next;
+    setDraft(next);
+  }, []);
+
+  const finishDraw = useCallback(() => {
+    const pts = draftRef.current;
+    if (pts && pts.length >= 3) onFinishDraw?.(pts);
+    commitDraft([]);
+    setDraftCursor(null);
+    gestureRef.current = null;
+  }, [onFinishDraw, commitDraft]);
+
+  const cancelDraw = useCallback(() => {
+    commitDraft([]);
+    setDraftCursor(null);
+    gestureRef.current = null;
+    onCancelDraw?.();
+  }, [commitDraft, onCancelDraw]);
+
+  // Leaving draw mode clears any half-drawn outline.
+  useEffect(() => {
+    if (!drawMode) {
+      commitDraft([]);
+      setDraftCursor(null);
+      gestureRef.current = null;
+    }
+  }, [drawMode, commitDraft]);
+
+  // Enter finishes the area, Escape cancels it — only while drawing.
+  useEffect(() => {
+    if (!drawMode) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); cancelDraw(); }
+      else if (e.key === 'Enter') { e.preventDefault(); finishDraw(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawMode, cancelDraw, finishDraw]);
   const [uvLoaded, setUvLoaded] = useState(false);
   const [stickersLoaded, setStickersLoaded] = useState(false);
   const [maskLoaded, setMaskLoaded] = useState(0);
@@ -196,9 +244,44 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
       ctx.drawImage(stickersImageRef.current, 0, 0, W, H);
     }
 
-    if (selectedId) {
+    if (selectedId && !drawMode) {
       const layer = layers.find(l => l.id === selectedId);
-      if (layer) {
+      if (layer && layer.type === 'freeform') {
+        // Freeform selection — dashed polygon outline + round vertex handles.
+        const pts = layer.points || [];
+        if (pts.length) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.closePath();
+          ctx.setLineDash([14, 7]);
+          ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+          ctx.lineWidth = 7;
+          ctx.stroke();
+          ctx.strokeStyle = layer.locked ? '#F5C400' : '#FFFFFF';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+          ctx.setLineDash([]);
+          if (!layer.locked) {
+            for (const p of pts) {
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, VERTEX_HANDLE_RADIUS + 3, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(0,0,0,0.5)';
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, VERTEX_HANDLE_RADIUS, 0, Math.PI * 2);
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(p.x, p.y, VERTEX_HANDLE_RADIUS * 0.45, 0, Math.PI * 2);
+              ctx.fillStyle = '#2196F3';
+              ctx.fill();
+            }
+          }
+          ctx.restore();
+        }
+      } else if (layer) {
         const cornerPts = getLayerCornerPoints(layer);
         const edgePts = getLayerEdgePoints(layer);
 
@@ -263,7 +346,49 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
         }
       }
     }
-  }, [layers, baseColour, baseOpacity, selectedId, uvVisible, uvLoaded, stickersVisible, stickersLoaded, maskLoaded, scale, fontTick]);
+
+    // In-progress freeform outline while the area-draw tool is active.
+    if (drawMode && draft.length) {
+      const pathThrough = (extraCursor) => {
+        ctx.beginPath();
+        ctx.moveTo(draft[0].x, draft[0].y);
+        for (let i = 1; i < draft.length; i++) ctx.lineTo(draft[i].x, draft[i].y);
+        if (extraCursor && draftCursor) ctx.lineTo(draftCursor.x, draftCursor.y);
+      };
+      ctx.save();
+      // Faint fill preview of the enclosed area
+      if (draft.length >= 3) {
+        pathThrough(false);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(34,211,238,0.15)';
+        ctx.fill();
+      }
+      // Outline with a rubber-band segment to the cursor
+      ctx.lineJoin = 'round';
+      pathThrough(true);
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+      ctx.lineWidth = 8;
+      ctx.setLineDash([]);
+      ctx.stroke();
+      ctx.strokeStyle = '#22d3ee';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([18, 10]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // Vertices — first point larger/gold so the user can see where it closes
+      for (let i = 0; i < draft.length; i++) {
+        const p = draft[i];
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, i === 0 ? 16 : 10, 0, Math.PI * 2);
+        ctx.fillStyle = i === 0 ? '#F5C400' : '#FFFFFF';
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }, [layers, baseColour, baseOpacity, selectedId, uvVisible, uvLoaded, stickersVisible, stickersLoaded, maskLoaded, scale, fontTick, drawMode, draft, draftCursor]);
 
   // Zoom centred on a point (container-relative px coords)
   const applyZoom = useCallback((factor, originX, originY) => {
@@ -309,7 +434,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
   }, [vehicle]);
 
   const handleMouseDown = useCallback((e) => {
-    // Right-click — start panning the canvas view
+    // Right-click — start panning the canvas view (works even while drawing)
     if (e.button === 2) {
       e.preventDefault();
       setPanning({ startX: e.clientX, startY: e.clientY, origPan: { ...pan } });
@@ -318,9 +443,33 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
     if (e.button !== 0) return;
     const { x, y } = toCanvas(e);
 
+    // Area-draw tool: defer the click-vs-freehand decision to mouse-move / up.
+    if (drawMode) {
+      gestureRef.current = { startX: x, startY: y, freehand: false };
+      return;
+    }
+
+    // Editing a selected freeform area — drag a vertex, or move the whole shape.
+    if (selectedId) {
+      const fl = layers.find(l => l.id === selectedId);
+      if (fl && fl.type === 'freeform' && !fl.locked) {
+        const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
+        const vThreshold = VERTEX_HANDLE_RADIUS * pxScale * 2;
+        const vi = hitTestPoint(fl.points || [], x, y, vThreshold);
+        if (vi !== -1) {
+          setCornerDrag({ kind: 'vertex', idx: vi, startX: x, startY: y, origPoints: fl.points.map(p => ({ ...p })) });
+          return;
+        }
+        if (pointInPolygon(fl.points, x, y)) {
+          setDragging({ layerId: fl.id, mode: 'freeform', startX: x, startY: y, origPoints: fl.points.map(p => ({ ...p })) });
+          return;
+        }
+      }
+    }
+
     if (selectedId) {
       const layer = layers.find(l => l.id === selectedId);
-      if (layer && !layer.locked) {
+      if (layer && layer.type !== 'freeform' && !layer.locked) {
         const cornerPts = getLayerCornerPoints(layer);
         const edgePts = getLayerEdgePoints(layer);
         const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
@@ -366,11 +515,15 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
 
     if (hit) {
       onSelect(hit.id);
-      setDragging({ layerId: hit.id, startX: x, startY: y, origX: hit.x, origY: hit.y });
+      if (hit.type === 'freeform') {
+        setDragging({ layerId: hit.id, mode: 'freeform', startX: x, startY: y, origPoints: (hit.points || []).map(p => ({ ...p })) });
+      } else {
+        setDragging({ layerId: hit.id, startX: x, startY: y, origX: hit.x, origY: hit.y });
+      }
     } else {
       onSelect(null);
     }
-  }, [layers, selectedId, toCanvas, onSelect, vehicle, pan]);
+  }, [layers, selectedId, toCanvas, onSelect, vehicle, pan, drawMode]);
 
   const handleMouseMove = useCallback((e) => {
     // Pan with right mouse button
@@ -384,13 +537,42 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
 
     const { x, y } = toCanvas(e);
 
+    // Area-draw tool: build the outline as the user clicks / drags freehand.
+    if (drawMode) {
+      const g = gestureRef.current;
+      if (g) {
+        const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
+        const moveThreshold = 5 * pxScale;
+        const spacing = 10 * pxScale;
+        if (g.freehand || Math.hypot(x - g.startX, y - g.startY) > moveThreshold) {
+          const arr = draftRef.current.slice();
+          if (!g.freehand) {
+            g.freehand = true;
+            arr.push({ x: g.startX, y: g.startY }); // seed with the press point
+          }
+          const last = arr[arr.length - 1];
+          if (!last || Math.hypot(x - last.x, y - last.y) >= spacing) {
+            arr.push({ x, y });
+            commitDraft(arr);
+          }
+        }
+      } else {
+        setDraftCursor({ x, y }); // rubber-band preview between clicks
+      }
+      return;
+    }
+
     // Update hover cursor when not actively dragging
     if (!dragging && !cornerDrag) {
       let next = 'crosshair';
       let onHandle = false;
       if (selectedId) {
         const layer = layers.find(l => l.id === selectedId);
-        if (layer && !layer.locked) {
+        if (layer && layer.type === 'freeform' && !layer.locked) {
+          const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
+          const vThreshold = VERTEX_HANDLE_RADIUS * pxScale * 2;
+          if (hitTestPoint(layer.points || [], x, y, vThreshold) !== -1) onHandle = true;
+        } else if (layer && !layer.locked) {
           const cornerPts = getLayerCornerPoints(layer);
           const edgePts = getLayerEdgePoints(layer);
           const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
@@ -415,6 +597,17 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
     if (cornerDrag && selectedId) {
       const layer = layers.find(l => l.id === selectedId);
       if (!layer) return;
+
+      // Freeform vertex drag — move just the grabbed point.
+      if (cornerDrag.kind === 'vertex') {
+        const dvx = x - cornerDrag.startX;
+        const dvy = y - cornerDrag.startY;
+        const newPoints = cornerDrag.origPoints.map((p, i) =>
+          i === cornerDrag.idx ? { x: p.x + dvx, y: p.y + dvy } : { ...p }
+        );
+        onLayerChange(withFreeformBBox({ ...layer, points: newPoints }));
+        return;
+      }
 
       // Convert world delta -> layer-local delta. The flip mirrors handle
       // positions in world space (see applyFlipToPoints), so un-mirror the world
@@ -455,16 +648,45 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
       const dy = y - dragging.startY;
       const layer = layers.find(l => l.id === dragging.layerId);
       if (!layer) return;
+      if (dragging.mode === 'freeform') {
+        const newPoints = dragging.origPoints.map(p => ({ x: p.x + dx, y: p.y + dy }));
+        onLayerChange(withFreeformBBox({ ...layer, points: newPoints }));
+        return;
+      }
       onLayerChange({ ...layer, x: dragging.origX + dx, y: dragging.origY + dy });
     }
-  }, [cornerDrag, dragging, panning, selectedId, layers, toCanvas, onLayerChange, vehicle]);
+  }, [cornerDrag, dragging, panning, selectedId, layers, toCanvas, onLayerChange, vehicle, drawMode, commitDraft]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((e) => {
+    // Area-draw tool: finish a freehand stroke, or place / close a polygon point.
+    if (drawMode && e?.button !== 2) {
+      const g = gestureRef.current;
+      gestureRef.current = null;
+      if (g) {
+        if (g.freehand) {
+          // A dragged stroke auto-closes when it encloses an area.
+          finishDraw();
+        } else {
+          // A plain click adds a vertex — or closes if it lands on the start point.
+          const pxScale = vehicle.canvasWidth / canvasRef.current.getBoundingClientRect().width;
+          const closeThreshold = 18 * pxScale;
+          const arr = draftRef.current.slice();
+          if (arr.length >= 3 && Math.hypot(g.startX - arr[0].x, g.startY - arr[0].y) <= closeThreshold) {
+            finishDraw();
+          } else {
+            arr.push({ x: g.startX, y: g.startY });
+            commitDraft(arr);
+          }
+        }
+      }
+      setPanning(null);
+      return;
+    }
     if (dragging || cornerDrag) onLayerCommit?.();
     setDragging(null);
     setCornerDrag(null);
     setPanning(null);
-  }, [dragging, cornerDrag, onLayerCommit]);
+  }, [dragging, cornerDrag, onLayerCommit, drawMode, finishDraw, commitDraft, vehicle]);
 
   // Drag handlers for guide lines (attached to window so dragging works smoothly)
   useEffect(() => {
@@ -489,7 +711,7 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
     };
   }, [guideDrag, vehicle.canvasWidth, vehicle.canvasHeight]);
 
-  const cursor = panning ? 'grabbing' : cornerDrag ? 'crosshair' : dragging ? 'grabbing' : hoverCursor;
+  const cursor = panning ? 'grabbing' : drawMode ? 'crosshair' : cornerDrag ? 'crosshair' : dragging ? 'grabbing' : hoverCursor;
 
   // Guide pixel positions in container space (so they line up with the canvas regardless of zoom/pan)
   const guideScale = scale * zoom;
@@ -528,6 +750,38 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
         ref={canvasRef}
         style={canvasStyle}
       />
+
+      {/* Area-draw instructions + finish/cancel controls */}
+      {drawMode && (
+        <div
+          className="absolute top-3 left-1/2 -translate-x-1/2 z-30 flex flex-col items-center gap-2 select-none"
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        >
+          <div className="px-3 py-2 rounded-lg bg-card/95 border border-accent/50 shadow-lg text-center max-w-xs">
+            <p className="text-xs font-rajdhani font-bold uppercase tracking-widest text-accent">Draw Area</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+              Click to add points around a shape, or hold and drag to draw freehand.
+              Close on the first point, or press <span className="text-foreground font-semibold">Finish</span>.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={finishDraw}
+              disabled={draft.length < 3}
+              className="px-3 h-8 rounded-md bg-primary text-primary-foreground text-xs font-rajdhani font-bold uppercase tracking-wide disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary/90 transition-colors shadow"
+            >
+              Finish Area
+            </button>
+            <button
+              onClick={cancelDraw}
+              className="px-3 h-8 rounded-md bg-secondary text-foreground text-xs font-rajdhani font-bold uppercase tracking-wide hover:bg-secondary/70 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Draggable guide lines */}
       {guidesVisible && (
