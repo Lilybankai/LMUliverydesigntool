@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { SHAPE_TYPES, SHAPE_GROUPS } from '@/lib/shapes';
 import { Button } from '@/components/ui/button';
-import { Type } from 'lucide-react';
+import { Type, Lasso } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
-export default function Toolbar({ onAddShape, onAddText, openGroup: openGroupProp, onOpenGroupChange }) {
+export default function Toolbar({ onAddShape, onAddText, onStartAreaDraw, areaDrawing = false, openGroup: openGroupProp, onOpenGroupChange }) {
   const [openGroupState, setOpenGroupState] = useState(null);
   const openGroup = openGroupProp !== undefined ? openGroupProp : openGroupState;
   const setOpenGroup = onOpenGroupChange || setOpenGroupState;
@@ -23,6 +23,28 @@ export default function Toolbar({ onAddShape, onAddText, openGroup: openGroupPro
           <Type className="w-3.5 h-3.5" />
           Add Text
         </Button>
+
+        {/* Draw Area — freeform selection you can fill with a colour or pattern */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onStartAreaDraw?.()}
+              className={cn(
+                "w-full justify-start gap-2 h-7 text-xs font-bold uppercase tracking-widest font-rajdhani",
+                areaDrawing
+                  ? "bg-accent/20 text-accent border-accent/60"
+                  : "hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+              )}
+            >
+              <Lasso className="w-3.5 h-3.5" />
+              {areaDrawing ? 'Drawing…' : 'Draw Area'}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="right">Draw a freeform area, then fill it with a colour or pattern</TooltipContent>
+        </Tooltip>
+
         {SHAPE_GROUPS.map(group => {
           const items = SHAPE_TYPES.filter(s => s.group === group.id);
           const isOpen = openGroup === group.id;

@@ -6,6 +6,14 @@ All notable changes to the LMU Livery Design Tool.
 
 ### Added
 
+- **Draw Area tool (freeform selection + fill).** A new **Draw Area** button lets you
+  outline any region directly on the car — click to drop points around a shape like a
+  door or bonnet, or hold and drag to sketch it freehand — then fill *only* that region
+  with a solid colour, a gradient, or any of the existing patterns/textures. The area
+  becomes an ordinary layer: reselect it to change its colour or pattern, drag the whole
+  shape to move it, drag the blue dots to reshape individual points, and duplicate, lock
+  or delete it from the Layers panel. This is the answer to "I want to select an area and
+  just change its colour" without having to warp a rectangular pattern to fit.
 - **19 new cars, taking the roster from 10 to 29.** Every class in Le Mans Ultimate is
   now covered.
   - **Hypercar (13)** — Ferrari 499P, Toyota GR010 Hybrid, Porsche 963, Cadillac

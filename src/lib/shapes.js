@@ -1184,37 +1184,147 @@ function drawTextLayer(ctx, layer) {
   ctx.restore();
 }
 
+// ─── Pattern / texture dispatch maps ─────────────────────────────────────────
+// Shared at module scope so both drawShape and the freeform area-fill can look
+// a draw function up by id.
+const PATTERN_MAP = {
+  pat_stripes: drawPatStripes,
+  pat_checker: drawPatChecker,
+  pat_polka: drawPatPolka,
+  pat_zigzag: drawPatZigzag,
+  pat_houndstooth: drawPatHoundstooth,
+  pat_crosshatch: drawPatCrosshatch,
+  pat_diagonal_stripes: drawPatDiagonalStripes,
+  pat_honeycomb: drawPatHoneycomb,
+  pat_carbon: drawPatCarbon,
+  pat_herringbone: drawPatHerringbone,
+};
+const TEXTURE_MAP = {
+  tex_waves: drawTexWaves,
+  tex_wavy_lines: drawTexWavyLines,
+  tex_camo: drawTexCamo,
+  tex_noise: drawTexNoise,
+  tex_brushed: drawTexBrushed,
+  tex_circuit: drawTexCircuit,
+  tex_scales: drawTexScales,
+  tex_leopard: drawTexLeopard,
+  tex_splatter: drawTexSplatter,
+  tex_halftone: drawTexHalftone,
+};
+
+// ─── Freeform area (drawn selection) ─────────────────────────────────────────
+// A freeform layer is a user-drawn closed polygon of `points` (absolute canvas
+// coords). It can be filled with a solid colour / gradient, or with any of the
+// existing patterns/textures — the fill is clipped to the drawn outline, so you
+// can e.g. draw around a door and drop a pattern into just that area.
+
+export function freeformBBox(points) {
+  if (!points || !points.length) return { x: 0, y: 0, width: 1, height: 1 };
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of points) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return { x: minX, y: minY, width: Math.max(1, maxX - minX), height: Math.max(1, maxY - minY) };
+}
+
+// Keep a freeform layer's bounding box (x/y/width/height) in step with its
+// points so the generic layer machinery (selection, duplicate offsets, saved
+// design metadata) always has sane values to work with.
+export function withFreeformBBox(layer) {
+  return { ...layer, ...freeformBBox(layer.points) };
+}
+
+// Standard ray-casting point-in-polygon test (canvas coords).
+export function pointInPolygon(points, x, y) {
+  if (!points || points.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const xi = points[i].x, yi = points[i].y;
+    const xj = points[j].x, yj = points[j].y;
+    const intersect = ((yi > y) !== (yj > y)) &&
+      (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-12) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+export function createFreeformLayer(points) {
+  const pts = (points || []).map(p => ({ x: p.x, y: p.y }));
+  const bbox = freeformBBox(pts);
+  return {
+    id: crypto.randomUUID(),
+    type: 'freeform',
+    points: pts,
+    x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height,
+    rotation: 0,
+    skewX: 0,
+    flipX: false,
+    flipY: false,
+    corners: DEFAULT_CORNERS.map(c => ({ ...c })),
+    edges: DEFAULT_EDGES.map(e => ({ ...e })),
+    fillType: 'solid',   // 'solid' | 'pattern'
+    patternType: null,   // a pat_* / tex_* id when fillType === 'pattern'
+    colour: '#E63946',
+    colour2: '#FFFFFF',
+    opacity: 1,
+    visible: true,
+    locked: false,
+    label: 'Area',
+  };
+}
+
+function traceFreeformPath(ctx, points) {
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+  ctx.closePath();
+}
+
+function drawFreeform(ctx, layer) {
+  const points = layer.points;
+  if (!points || points.length < 3) return;
+  const bbox = freeformBBox(points);
+
+  // Pattern / texture fill — clip to the polygon, then let the existing pattern
+  // renderer paint across the polygon's bounding box.
+  if (layer.fillType === 'pattern' && layer.patternType) {
+    const fn = PATTERN_MAP[layer.patternType] || TEXTURE_MAP[layer.patternType];
+    if (fn) {
+      ctx.save();
+      traceFreeformPath(ctx, points);
+      ctx.clip();
+      const sub = {
+        ...layer,
+        type: layer.patternType,
+        x: bbox.x, y: bbox.y, width: bbox.width, height: bbox.height,
+        rotation: 0, skewX: 0, flipX: false, flipY: false,
+        corners: DEFAULT_CORNERS, edges: DEFAULT_EDGES,
+      };
+      fn(ctx, sub);
+      ctx.restore();
+      return;
+    }
+  }
+
+  // Solid colour / gradient fill.
+  ctx.save();
+  ctx.globalAlpha = layer.opacity;
+  traceFreeformPath(ctx, points);
+  ctx.fillStyle = fillStyleFor(ctx, layer, layer.colour || '#E63946',
+    [bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height]);
+  ctx.fill();
+  ctx.restore();
+}
+
 // ─── Main draw dispatcher ───────────────────────────────────────────────────
 
 export function drawShape(ctx, layer) {
-  // Pattern types
-  const patternMap = {
-    pat_stripes: drawPatStripes,
-    pat_checker: drawPatChecker,
-    pat_polka: drawPatPolka,
-    pat_zigzag: drawPatZigzag,
-    pat_houndstooth: drawPatHoundstooth,
-    pat_crosshatch: drawPatCrosshatch,
-    pat_diagonal_stripes: drawPatDiagonalStripes,
-    pat_honeycomb: drawPatHoneycomb,
-    pat_carbon: drawPatCarbon,
-    pat_herringbone: drawPatHerringbone,
-  };
-  const textureMap = {
-    tex_waves: drawTexWaves,
-    tex_wavy_lines: drawTexWavyLines,
-    tex_camo: drawTexCamo,
-    tex_noise: drawTexNoise,
-    tex_brushed: drawTexBrushed,
-    tex_circuit: drawTexCircuit,
-    tex_scales: drawTexScales,
-    tex_leopard: drawTexLeopard,
-    tex_splatter: drawTexSplatter,
-    tex_halftone: drawTexHalftone,
-  };
-
-  if (patternMap[layer.type]) { patternMap[layer.type](ctx, layer); return; }
-  if (textureMap[layer.type]) { textureMap[layer.type](ctx, layer); return; }
+  if (layer.type === 'freeform') { drawFreeform(ctx, layer); return; }
+  if (PATTERN_MAP[layer.type]) { PATTERN_MAP[layer.type](ctx, layer); return; }
+  if (TEXTURE_MAP[layer.type]) { TEXTURE_MAP[layer.type](ctx, layer); return; }
 
   // ── Image type ─────────────────────────────────────────────────────────────
   if (layer.type === 'image' && layer._imgElement) {
@@ -1487,6 +1597,7 @@ export function drawShape(ctx, layer) {
 }
 
 export function hitTest(layer, px, py) {
+  if (layer.type === 'freeform') return pointInPolygon(layer.points, px, py);
   const cx = layer.x + layer.width / 2;
   const cy = layer.y + layer.height / 2;
   const rad = (-layer.rotation * Math.PI) / 180;
