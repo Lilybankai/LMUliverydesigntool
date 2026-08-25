@@ -52,6 +52,13 @@ const SHADING_RE = /^(carbon|carbon\s*fibre|carbon\s*fiber|plastic|parts)$/i;
 /** Groups holding series-specific number plates. */
 const PLATES_RE = /^(number\s*(plates?|board).*|numplate)$/i;
 
+/**
+ * Wire-layer intensities at or below this count as the black ground rather than mesh.
+ * Real mesh lines sit far higher (the dimmest are ~100); this only catches render
+ * noise. See the inversion step below for why it matters.
+ */
+const WIRE_NOISE_FLOOR = 8;
+
 const nameOf = (n) => (n.name ?? '').trim();
 /** Extra group names to drop entirely, supplied per file via --exclude. */
 let EXCLUDE = [];
@@ -235,7 +242,13 @@ if (uv?.canvas) {
   for (let i = 0; i < d.length; i += 4) {
     // Flatten to intensity first: the mesh is drawn in mixed colours, and inverting
     // per-channel would tint the guide (green mesh -> magenta lines).
-    const v = 255 - Math.max(d[i], d[i + 1], d[i + 2]);
+    const lit = Math.max(d[i], d[i + 1], d[i + 2]);
+    // Some wire renders (BMW M4 GT3) carry faint noise across their black ground
+    // instead of true black. Inverted it becomes a near-white haze that multiply
+    // leaves visually identical but that costs ~3MB of WebP - the clean files are
+    // essentially two-tone. Snapping the floor to black is invisible and keeps
+    // every guide in the same weight class as the rest of the pack.
+    const v = 255 - (lit <= WIRE_NOISE_FLOOR ? 0 : lit);
     d[i] = v;
     d[i + 1] = v;
     d[i + 2] = v;
