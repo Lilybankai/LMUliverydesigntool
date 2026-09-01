@@ -224,22 +224,36 @@ export function findByPath(psd, path) {
   return matches.find((m) => m.mask?.canvas) ?? matches[0] ?? null;
 }
 
+/**
+ * Wrap an alpha plate as a silhouette result. `inside` is the binary form the
+ * cross-checks below run on, kept alongside the canvas so nothing has to re-read
+ * 16M pixels back out of it.
+ */
+function silhouetteResult(canvas, id, W, H) {
+  const inside = new Uint8Array(W * H);
+  let n = 0;
+  for (let i = 0, p = 3; i < inside.length; i++, p += 4) {
+    if (id.data[p] > 127) {
+      inside[i] = 1;
+      n++;
+    }
+  }
+  canvas.getContext('2d').putImageData(id, 0, 0);
+  return { canvas, inside, coverage: n / (W * H) };
+}
+
 /** Turn a layer's mask into an inside-the-body silhouette plate. */
 function silhouetteFromMask(layer, W, H, invert) {
   const mp = maskPlate(layer, W, H);
   if (!mp) return null;
   const out = createCanvas(W, H);
   const id = out.getContext('2d').createImageData(W, H);
-  let inside = 0;
   for (let i = 0; i < id.data.length; i += 4) {
     const lum = (mp.data[i] * 0.299 + mp.data[i + 1] * 0.587 + mp.data[i + 2] * 0.114) | 0;
-    const a = invert ? 255 - lum : lum;
     id.data[i] = id.data[i + 1] = id.data[i + 2] = 255;
-    id.data[i + 3] = a;
-    if (a > 127) inside++;
+    id.data[i + 3] = invert ? 255 - lum : lum;
   }
-  out.getContext('2d').putImageData(id, 0, 0);
-  return { canvas: out, coverage: inside / (W * H) };
+  return silhouetteResult(out, id, W, H);
 }
 
 /** Silhouette from a layer's own painted pixels, ignoring any mask on it. */
@@ -251,31 +265,172 @@ function silhouetteFromAlpha(layer, W, H) {
 
   const out = createCanvas(W, H);
   const id = out.getContext('2d').createImageData(W, H);
-  let inside = 0;
   for (let i = 0; i < id.data.length; i += 4) {
-    const a = sd[i + 3];
     id.data[i] = id.data[i + 1] = id.data[i + 2] = 255;
-    id.data[i + 3] = a;
-    if (a > 127) inside++;
+    id.data[i + 3] = sd[i + 3];
   }
-  out.getContext('2d').putImageData(id, 0, 0);
-  return { canvas: out, coverage: inside / (W * H) };
+  return silhouetteResult(out, id, W, H);
 }
 
-export function buildSilhouette(psd, W, H, explicitPath) {
+/**
+ * Wire-layer intensities at or below this count as the black ground rather than mesh.
+ * Real mesh lines sit far higher (the dimmest are ~100); this only catches the render
+ * noise some files carry across their black ground (BMW M4 GT3 is the worst).
+ */
+export const WIRE_NOISE_FLOOR = 8;
+
+/**
+ * Closing radius used to turn mesh lines into solid islands, in 4096-canvas pixels.
+ * Big enough to bridge the gap across one mesh quad, small enough not to weld
+ * neighbouring islands together across the gutters between them - measured against
+ * the shipped guides, 2 gives ~95% IoU with the authored outlines and 4 starts
+ * bleeding into the surround.
+ */
+const WIRE_CLOSE_RADIUS = 2;
+
+/**
+ * Binary box dilate/erode via an integral image: O(pixels) regardless of radius,
+ * which matters at 4096x4096.
+ */
+function boxMorph(bin, W, H, r, mode) {
+  const I = new Uint32Array((W + 1) * (H + 1));
+  for (let y = 0; y < H; y++) {
+    let row = 0;
+    for (let x = 0; x < W; x++) {
+      row += bin[y * W + x];
+      I[(y + 1) * (W + 1) + x + 1] = I[y * (W + 1) + x + 1] + row;
+    }
+  }
+  const out = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(H - 1, y + r);
+    for (let x = 0; x < W; x++) {
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(W - 1, x + r);
+      const sum =
+        I[(y1 + 1) * (W + 1) + x1 + 1] -
+        I[y0 * (W + 1) + x1 + 1] -
+        I[(y1 + 1) * (W + 1) + x0] +
+        I[y0 * (W + 1) + x0];
+      const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+      out[y * W + x] = mode === 'dilate' ? (sum > 0 ? 1 : 0) : sum === area ? 1 : 0;
+    }
+  }
+  return out;
+}
+
+/** Set every background pixel that cannot reach the canvas edge - i.e. fill holes. */
+function fillEnclosed(bin, W, H) {
+  const out = Uint8Array.from(bin);
+  const seen = new Uint8Array(W * H);
+  const queue = new Int32Array(W * H);
+  let head = 0;
+  let tail = 0;
+  const push = (i) => {
+    if (!seen[i] && !bin[i]) {
+      seen[i] = 1;
+      queue[tail++] = i;
+    }
+  };
+  for (let x = 0; x < W; x++) {
+    push(x);
+    push((H - 1) * W + x);
+  }
+  for (let y = 0; y < H; y++) {
+    push(y * W);
+    push(y * W + W - 1);
+  }
+  while (head < tail) {
+    const i = queue[head++];
+    const x = i % W;
+    const y = (i / W) | 0;
+    if (x > 0) push(i - 1);
+    if (x < W - 1) push(i + 1);
+    if (y > 0) push(i - W);
+    if (y < H - 1) push(i + W);
+  }
+  for (let i = 0; i < out.length; i++) if (!bin[i] && !seen[i]) out[i] = 1;
+  return out;
+}
+
+/**
+ * Silhouette reconstructed from the UV wireframe itself.
+ *
+ * Every template ships the mesh as its top-most layer, and the mesh is drawn on
+ * exactly the UV islands - so closing the line work into solid shapes recovers the
+ * body outline from the one layer whose meaning never varies between files. That
+ * makes it the safety net for files whose authored outline is missing or wrong,
+ * which is otherwise invisible: the guide simply bakes black over the panels it
+ * dropped, and the mask leaves them unpaintable in the editor.
+ */
+export function silhouetteFromWire(wire, W, H, { floor = WIRE_NOISE_FLOOR } = {}) {
+  if (!wire?.canvas) return null;
+  const src = createCanvas(W, H);
+  src.getContext('2d').drawImage(wire.canvas, wire.left ?? 0, wire.top ?? 0);
+  const d = src.getContext('2d').getImageData(0, 0, W, H).data;
+
+  const lines = new Uint8Array(W * H);
+  for (let i = 0, p = 0; i < lines.length; i++, p += 4) {
+    // Same intensity test the guide's inversion uses, so "is this mesh?" is answered
+    // identically in both places.
+    lines[i] = d[p + 3] > 0 && Math.max(d[p], d[p + 1], d[p + 2]) > floor ? 1 : 0;
+  }
+
+  const r = Math.max(1, Math.round((WIRE_CLOSE_RADIUS * Math.max(W, H)) / 4096));
+  const solid = boxMorph(fillEnclosed(boxMorph(lines, W, H, r, 'dilate'), W, H), W, H, r, 'erode');
+
+  const out = createCanvas(W, H);
+  const id = out.getContext('2d').createImageData(W, H);
+  for (let i = 0, p = 0; i < solid.length; i++, p += 4) {
+    id.data[p] = id.data[p + 1] = id.data[p + 2] = 255;
+    id.data[p + 3] = solid[i] ? 255 : 0;
+  }
+  return silhouetteResult(out, id, W, H);
+}
+
+/** Share of `b`'s pixels that `a` also covers. */
+function overlap(a, b) {
+  let both = 0;
+  let n = 0;
+  for (let i = 0; i < b.length; i++) {
+    if (!b[i]) continue;
+    n++;
+    if (a[i]) both++;
+  }
+  return n ? both / n : 0;
+}
+
+/**
+ * A wire silhouette this far outside the usual 40-75% island coverage is not a body
+ * outline - a mesh render that failed to threshold would land at 0% or 100% - so it
+ * is not trusted to overrule an authored outline.
+ */
+const WIRE_SANE = [0.15, 0.9];
+
+/**
+ * How much of the mesh an authored outline may drop before the wire replaces it.
+ * The shipped-and-correct outlines track the mesh to within a few percent; the Aston
+ * Valkyrie's `region > Region 1` - one material selector out of several, not the body
+ * outline - dropped well over half of it.
+ */
+const MAX_DROPPED = 0.15;
+
+/** The outline as the PSD's author drew it, before it is checked against the mesh. */
+function authoredSilhouette(psd, W, H, explicitPath) {
   const kids = psd.children ?? [];
 
   // An explicit override wins: several files carry the body outline on a layer whose
-  // name gives no clue (Aston Valkyrie uses "region > Region 1"; Genesis GMR-001 has
-  // it under "Car Stickers > Michelin > Michelin"), so those are named in the manifest
-  // rather than guessed at by coverage heuristics.
+  // name gives no clue (Genesis GMR-001 has it under "Car Stickers > Michelin >
+  // Michelin"), so those are named in the manifest rather than guessed at by coverage
+  // heuristics.
   if (explicitPath) {
     const layer = findByPath(psd, explicitPath);
-    if (!layer) return { canvas: null, source: null, rejected: `layer not found: ${explicitPath}` };
+    if (!layer) return { rejected: `layer not found: ${explicitPath}` };
 
     const r = silhouetteFromMask(layer, W, H, false);
     if (r && r.coverage >= 0.05) {
-      return { canvas: r.canvas, source: `${explicitPath} mask ${(r.coverage * 100).toFixed(0)}%` };
+      return { ...r, source: `${explicitPath} mask ${(r.coverage * 100).toFixed(0)}%` };
     }
 
     // Some files keep the outline in the fill layer's own pixels and use the mask to
@@ -283,42 +438,77 @@ export function buildSilhouette(psd, W, H, explicitPath) {
     // fall back to the layer's raster alpha, ignoring the mask entirely.
     const a = silhouetteFromAlpha(layer, W, H);
     if (a && a.coverage >= 0.05) {
-      return { canvas: a.canvas, source: `${explicitPath} shape ${(a.coverage * 100).toFixed(0)}%` };
+      return { ...a, source: `${explicitPath} shape ${(a.coverage * 100).toFixed(0)}%` };
     }
-    return { canvas: null, source: null, rejected: `no usable outline on: ${explicitPath}` };
+    return { rejected: `no usable outline on: ${explicitPath}` };
   }
 
   // Three spellings occur in the shipped pack: "Mask(Disable for export)",
   // "Mask - Disable for export" (Mercedes AMG) and the typo "Maks(...)" (SC63).
   const surround = kids.find((k) => SURROUND_RE.test((k.name ?? '').trim()));
   const sp = surround ? maskPlate(surround, W, H) : null;
-  if (sp) {
-    const out = createCanvas(W, H);
-    const id = out.getContext('2d').createImageData(W, H);
-    let inside = 0;
-    for (let i = 0; i < id.data.length; i += 4) {
-      const lum = (sp.data[i] * 0.299 + sp.data[i + 1] * 0.587 + sp.data[i + 2] * 0.114) | 0;
-      const a = 255 - lum; // plate covers OUTSIDE -> invert for inside
-      id.data[i] = id.data[i + 1] = id.data[i + 2] = 255;
-      id.data[i + 3] = a;
-      if (a > 127) inside++;
+  if (!sp) return { rejected: 'no surround plate' };
+
+  const out = createCanvas(W, H);
+  const id = out.getContext('2d').createImageData(W, H);
+  for (let i = 0; i < id.data.length; i += 4) {
+    const lum = (sp.data[i] * 0.299 + sp.data[i + 1] * 0.587 + sp.data[i + 2] * 0.114) | 0;
+    id.data[i] = id.data[i + 1] = id.data[i + 2] = 255;
+    id.data[i + 3] = 255 - lum; // plate covers OUTSIDE -> invert for inside
+  }
+  const plate = silhouetteResult(out, id, W, H);
+  // A silhouette covering almost nothing means this file uses the plate for
+  // something other than the body outline (Porsche 963 does).
+  if (plate.coverage < 0.05) {
+    return { rejected: `surround coverage ${(plate.coverage * 100).toFixed(1)}%` };
+  }
+  return { ...plate, source: `Mask(Disable for export) ${(plate.coverage * 100).toFixed(0)}%` };
+}
+
+/**
+ * Build the body-part silhouette: alpha 255 inside the UV islands, 0 outside.
+ *
+ * The authored outline is preferred - it is what the template's author drew, edges
+ * and all - but it is only kept if it agrees with the wireframe, which is the one
+ * layer in the pack whose meaning never varies. An outline that drops a large part of
+ * the mesh is not an outline, and the mesh-derived shape replaces it.
+ *
+ * NOTE: the "Region" group is deliberately NOT used as a fallback. Its children are
+ * material selectors (Carbon Fibre / Chrome / Car Wrap / ...), not a body outline -
+ * unioning them yields either the whole canvas or almost none of it, and picking one
+ * of them yields the panels made of that one material. That is what left the Aston
+ * Martin Valkyrie's guide and mask covering 42% of its islands.
+ */
+export function buildSilhouette(psd, W, H, explicitPath) {
+  const authored = authoredSilhouette(psd, W, H, explicitPath);
+  const wire = silhouetteFromWire(topLayer(psd), W, H);
+  const wireSane = wire && wire.coverage >= WIRE_SANE[0] && wire.coverage <= WIRE_SANE[1];
+  const wireSource = wire ? `wireframe ${(wire.coverage * 100).toFixed(0)}%` : null;
+
+  if (authored.canvas) {
+    if (!wireSane) return { canvas: authored.canvas, source: authored.source };
+
+    const dropped = 1 - overlap(authored.inside, wire.inside);
+    if (dropped <= MAX_DROPPED) {
+      return { canvas: authored.canvas, source: `${authored.source}, mesh -${(dropped * 100).toFixed(0)}%` };
     }
-    const coverage = inside / (W * H);
-    // A silhouette covering almost nothing means this file uses the plate for
-    // something other than the body outline (Porsche 963 does). Better a plain
-    // white base than a black square, so reject it and let the caller fall back.
-    if (coverage >= 0.05) {
-      out.getContext('2d').putImageData(id, 0, 0);
-      return { canvas: out, source: `Mask(Disable for export) ${(coverage * 100).toFixed(0)}%` };
+    // Only overrule an outline the mesh *contains*: a shape that sits somewhere else
+    // entirely is a different problem, and silently swapping it would hide it.
+    if (overlap(wire.inside, authored.inside) >= 0.9) {
+      return {
+        canvas: wire.canvas,
+        source: `${wireSource} (replaces ${authored.source}: dropped ${(dropped * 100).toFixed(0)}% of the mesh)`,
+      };
     }
-    return { canvas: null, source: null, rejected: `surround coverage ${(coverage * 100).toFixed(1)}%` };
+    return {
+      canvas: authored.canvas,
+      source: authored.source,
+      warning: `outline disagrees with the mesh: drops ${(dropped * 100).toFixed(0)}% of it`,
+    };
   }
 
-  // NOTE: the "Region" group is deliberately NOT used as a fallback. Its children are
-  // material selectors (Carbon Fibre / Chrome / Car Wrap / ...), not a body outline -
-  // unioning them yields either the whole canvas or almost none of it. The 4 files
-  // without a surround plate simply have no silhouette to recover.
-  return null;
+  if (wireSane) return { canvas: wire.canvas, source: `${wireSource} (no authored outline: ${authored.rejected})` };
+  return { canvas: null, source: null, rejected: authored.rejected };
 }
 
 /** Find a top-level (or nested) group by exact name, case-insensitive. */

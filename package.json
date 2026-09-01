@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint . --quiet",
+    "audit:assets": "node scripts/assets-audit.mjs",
+    "test:silhouette": "node --max-old-space-size=8192 scripts/silhouette-selftest.mjs",
     "lint:fix": "eslint . --fix",
     "typecheck": "tsc -p ./jsconfig.json",
     "preview": "vite preview"
