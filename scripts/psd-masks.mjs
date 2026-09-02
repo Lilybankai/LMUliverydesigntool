@@ -68,6 +68,7 @@ for (const j of jobs) {
     writeFileSync(file, out.toBuffer('image/png'));
     const kb = (statSync(file).size / 1024).toFixed(0);
     console.log(`OK   ${j.id.padEnd(30)} ${String(kb).padStart(5)} KB   ${sil.source}`);
+    if (sil.warning) console.log(`     warn ${sil.warning}`);
     ok++;
   } catch (err) {
     failed.push(`${j.id} (${err.message.slice(0, 50)})`);

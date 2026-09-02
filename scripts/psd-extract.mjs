@@ -21,7 +21,7 @@
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, isAbsolute } from 'node:path';
 import { createCanvas, loadImage } from '@napi-rs/canvas';
-import { loadPsd, composite, findGroup, buildSilhouette } from './psd-lib.mjs';
+import { loadPsd, composite, findGroup, buildSilhouette, WIRE_NOISE_FLOOR } from './psd-lib.mjs';
 
 const TEMPLATES =
   'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\Support\\LiveryTemplates';
@@ -51,13 +51,6 @@ const SHADING_RE = /^(carbon|carbon\s*fibre|carbon\s*fiber|plastic|parts)$/i;
 
 /** Groups holding series-specific number plates. */
 const PLATES_RE = /^(number\s*(plates?|board).*|numplate)$/i;
-
-/**
- * Wire-layer intensities at or below this count as the black ground rather than mesh.
- * Real mesh lines sit far higher (the dimmest are ~100); this only catches render
- * noise. See the inversion step below for why it matters.
- */
-const WIRE_NOISE_FLOOR = 8;
 
 const nameOf = (n) => (n.name ?? '').trim();
 /** Extra group names to drop entirely, supplied per file via --exclude. */
@@ -217,6 +210,7 @@ uctx.fillRect(0, 0, W, H);
 // so every car gets white islands on black regardless of which layers its PSD has.
 const sil = buildSilhouette(psd, W, H, args.silhouette);
 if (sil?.rejected) console.log(`silh   rejected (${sil.rejected})`);
+if (sil?.warning) warnings.push(`silhouette: ${sil.warning}`);
 if (sil?.canvas) {
   console.log(`silh   ${sil.source}`);
   uctx.drawImage(sil.canvas, 0, 0);

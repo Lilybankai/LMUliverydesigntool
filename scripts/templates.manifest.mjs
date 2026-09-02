@@ -149,9 +149,11 @@ export const TEMPLATES = [
     series: 'WEC',
     psd: 'Template_HYPER_AstonMartinValkyrie.psd',
     asset: 'AstonMartinValkyrie',
-    // No "Mask(Disable for export)" plate in this file; the body outline lives on a
-    // Region layer instead (42% coverage, verified visually).
-    silhouette: 'region > Region 1',
+    // No "Mask(Disable for export)" plate in this file, and no substitute for one:
+    // `region > Region 1` was used as the outline here and is not one - it is a single
+    // material selector, so it covered 42% of the islands and the guide baked black
+    // over every panel outside it (41% of the car's own decals landed on that black).
+    // With no override the outline is reconstructed from the wireframe instead.
   },
   {
     id: 'genesis_gmr001_hypercar',
@@ -160,7 +162,7 @@ export const TEMPLATES = [
     series: 'WEC',
     psd: 'Template_HYPER_GenesisGMR001.psd',
     asset: 'GenesisGMR001',
-    // Same situation as the Valkyrie, but the body outline is buried on a misleadingly
+    // No mask plate here either; this file's body outline is buried on a misleadingly
     // named layer inside the sticker tree (55% coverage, verified visually).
     silhouette: 'Car Stickers > Michelin > Michelin',
   },

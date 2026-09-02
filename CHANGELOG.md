@@ -4,6 +4,32 @@ All notable changes to the LMU Livery Design Tool.
 
 ## Unreleased — 10 August 2026
 
+### Fixed
+
+- **Aston Martin Valkyrie template was missing most of the car.** Its guide showed a
+  scatter of panels on black and the base colour only reached 42% of the texture, so
+  large parts of the car — including panels its own number plates and Michelin boards
+  sit on — could not be coloured at all. The extraction pipeline had been pointed at
+  `region > Region 1` as the car's body outline; that layer is one material selector
+  out of several, not the outline, so every panel outside it was baked black in the
+  guide and left out of the mask.
+
+  The outline is now cross-checked against the UV wireframe, which is the one layer in
+  the pack whose meaning never varies: an outline that drops a large part of the mesh
+  is replaced by the shape reconstructed from the mesh itself, and one that disagrees
+  in any other way is kept but reported. Files with no authored outline (the Valkyrie
+  now among them) use the reconstruction directly.
+
+  Two checks that need no PSD come with it: `npm run audit:assets` measures how much of
+  each car's official decal work is stranded off its mask — the way this bug shows up
+  in shipped assets — and `npm run test:silhouette` verifies the reconstruction against
+  the templates whose outlines are known good.
+
+  **The corrected Valkyrie assets are not in this commit**: regenerating them needs the
+  official PSD from a Le Mans Ultimate install, which no CI or cloud checkout has. Run
+  `psd-batch.mjs`, `psd-masks.mjs` and `webp-convert.mjs` on a machine with the game to
+  produce them, then `npm run audit:assets` to confirm.
+
 ### Added
 
 - **Draw Area tool (freeform selection + fill).** A new **Draw Area** button lets you
