@@ -150,6 +150,29 @@ Known limitations:
 - Material groups (`Carbon`, `Carbon Fibre`, `PARTS`, `plastic`) are dropped from both
   outputs; they vary wildly between files and Porsche 963's covers the whole canvas.
 
+### Mirror axis
+
+The two flanks of the car are unwrapped as a horizontal mirror pair, so the axis they
+reflect about is recoverable from the mask alone — reflect it about every candidate row
+and keep the row where it best lands on itself:
+
+```bash
+node scripts/mirror-axis.mjs            # axis + symmetry for every vehicle
+node scripts/mirror-axis.mjs --decals   # cross-check against the official decal sheets
+node scripts/mirror-axis.mjs --json     # machine-readable
+```
+
+Every car scores 0.66–0.94. The score is a symmetry measure, not a confidence: the
+missing share is the genuinely one-sided geometry (driver's window, fuel filler, exhaust
+exit) and the top-down bonnet islands, which mirror about their own local line. So the
+axis is a default to mirror *layers* about, not a transform for a finished texture.
+
+`--decals` re-derives the axis from `TOP_*.webp` instead, which is an independent signal
+— those sheets carry the real WEC door and quarter plates, positioned on body panels. It
+agrees with the mask on 28 of 29 cars to the exact pixel (the Alpine A424 is 1px out).
+Keep `--size` at the 384 default: at 256 the search settles on a second local optimum for
+the Lamborghini SC63 and Ferrari 499P, and `--decals` is what catches it.
+
 ## Supabase Setup
 
 Run [supabase-schema.sql](supabase-schema.sql) in the Supabase SQL Editor before enabling saves/login in production.
