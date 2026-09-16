@@ -6,21 +6,6 @@ import { useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { VEHICLES } from '@/lib/vehicles';
 
-const MOZA_LINK = 'https://mozaracing.com/XILEGTSIMRACING';
-const ADS = [
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/1a6296c3f_1689229122434.png', linkUrl: MOZA_LINK, title: 'MOZA Racing R12' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/8a2bd148d_1689229122434.png', linkUrl: MOZA_LINK, title: 'MOZA Racing KS Wheel' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/6e3325c66_1678434668438.png', linkUrl: MOZA_LINK, title: 'MOZA Racing R5 Bundle' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/e61ea5338_1678434788622.jpg', linkUrl: MOZA_LINK, title: 'MOZA Racing GS Wheel' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/acc57cb54_1689229073282.png', linkUrl: MOZA_LINK, title: 'MOZA Racing SRP2 Pedals' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/85f6217e7_Screenshot2026-05-23112321.png', linkUrl: 'https://my.trophi.ai/get-trophi?via=scot', title: 'Trophi.ai - Your Ultimate Cockpit Companion' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/bc49e074c_Screenshot2026-05-23143745.png', linkUrl: MOZA_LINK, title: 'MOZA Lamborghini Revuelto Steering Wheel' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/fa74c12a9_Screenshot2026-05-23143645.png', linkUrl: MOZA_LINK, title: 'MOZA R25 Ultra' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/ddc17e5bd_Screenshot2026-05-23143315.png', linkUrl: MOZA_LINK, title: 'MOZA KS Pro Steering Wheel' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/d8db524de_Screenshot2026-05-23112712.png', linkUrl: 'https://my.trophi.ai/get-trophi?via=scot', title: 'Trophi.ai - Discord Reviews' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/90c3ae6dd_Screenshot2026-05-23112456.png', linkUrl: 'https://my.trophi.ai/get-trophi?via=scot', title: 'Trophi.ai - Get Faster in Less Time' },
-  { imageUrl: 'https://media.db.com/images/public/6a0c25ca8273ff880fbe6f1c/946d6eb87_Screenshot2026-05-23112406.png', linkUrl: 'https://my.trophi.ai/get-trophi?via=scot', title: 'Trophi.ai - Champions are Made Here' },
-];
 import { createLayer, createTextLayer, createFreeformLayer, drawShape } from '@/lib/shapes';
 import { exportCanvasAsTga } from '@/lib/exportTga';
 import { loadImageFile } from '@/lib/importImage';
@@ -31,6 +16,7 @@ import PropertiesPanel from '@/components/livery/PropertiesPanel';
 import LiveryCanvas from '@/components/livery/LiveryCanvas';
 import ImageImport from '@/components/livery/ImageImport';
 import ExportAdDialog from '@/components/livery/ExportAdDialog';
+import ApexAioPromo from '@/components/livery/ApexAioPromo';
 import InteractiveTutorial from '@/components/livery/InteractiveTutorial';
 import MobileWarningDialog from '@/components/livery/MobileWarningDialog';
 import SaveDesignDialog from '@/components/livery/SaveDesignDialog';
@@ -98,7 +84,6 @@ export default function LiveryEditor() {
   const [guidesVisible, setGuidesVisible] = useState(false);
   const [baseOpacity, setBaseOpacity] = useState(1);
   const [adOpen, setAdOpen] = useState(false);
-  const [currentAd, setCurrentAd] = useState(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [toolbarGroup, setToolbarGroup] = useState(null);
   const [canvasDragging, setCanvasDragging] = useState(false);
@@ -627,8 +612,6 @@ export default function LiveryEditor() {
       setPaywallOpen(true);
       return;
     }
-    const randomAd = ADS[Math.floor(Math.random() * ADS.length)];
-    setCurrentAd(randomAd);
     setAdOpen(true);
   }, [vehicleId, vehicle.name, layers.length, resolvedBase, hasUsedFreeExport, hasActiveSub]);
 
@@ -786,6 +769,8 @@ export default function LiveryEditor() {
               />
               <Label htmlFor="guides-toggle" className="text-xs text-muted-foreground cursor-pointer">Guide Lines</Label>
             </div>
+
+            <ApexAioPromo />
           </div>
         </aside>
 
@@ -897,7 +882,7 @@ export default function LiveryEditor() {
         currentDesignName={currentDesignName}
       />
       <MyDesignsDialog open={myDesignsOpen} onOpenChange={setMyDesignsOpen} onLoad={handleLoadDesign} />
-      <ExportAdDialog open={adOpen} onOpenChange={setAdOpen} ad={currentAd} onDownload={handleDownload} />
+      <ExportAdDialog open={adOpen} onOpenChange={setAdOpen} onDownload={handleDownload} />
       <PaywallDialog open={paywallOpen} onOpenChange={setPaywallOpen} />
       <SuggestionDialog open={suggestOpen} onOpenChange={setSuggestOpen} />
       <InteractiveTutorial
