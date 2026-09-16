@@ -9,7 +9,9 @@
  * guide is drawn over its edges anyway, so half resolution is invisible and a quarter
  * of the weight.
  *
- * Usage: node --max-old-space-size=28672 scripts/psd-masks.mjs [outDir]
+ * Usage: node --max-old-space-size=28672 scripts/psd-masks.mjs [outDir] [only]
+ *   `only` filters by vehicle id substring or class, exactly as psd-batch.mjs does,
+ *   so adding one class does not mean re-deriving every shipped mask.
  */
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -20,6 +22,7 @@ import { TEMPLATES } from './templates.manifest.mjs';
 const DIR =
   'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\Support\\LiveryTemplates';
 const OUT = process.argv[2] || join(process.cwd(), 'public', 'lmutemplates');
+const ONLY = process.argv[3];
 const SIZE = 2048;
 
 /**
@@ -40,9 +43,9 @@ const GT3 = [
 ];
 
 const jobs = [
-  ...TEMPLATES.map((t) => ({ id: t.id, psd: t.psd, silhouette: t.silhouette })),
-  ...GT3.map(([id, psd]) => ({ id, psd, silhouette: undefined })),
-];
+  ...TEMPLATES.map((t) => ({ id: t.id, psd: t.psd, silhouette: t.silhouette, cls: t.class })),
+  ...GT3.map(([id, psd]) => ({ id, psd, silhouette: undefined, cls: 'LMGT3' })),
+].filter((j) => !ONLY || j.id.includes(ONLY) || j.cls === ONLY);
 
 if (!existsSync(OUT)) mkdirSync(OUT, { recursive: true });
 

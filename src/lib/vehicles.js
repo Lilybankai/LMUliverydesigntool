@@ -6,7 +6,7 @@ const LMU_BASE = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ult
  * Display order for the class-grouped vehicle picker. Any class not listed here is
  * appended after these, so adding a class to VEHICLES can never hide it.
  */
-export const CLASS_ORDER = ['Hypercar', 'LMP2', 'LMP3', 'LMGT3'];
+export const CLASS_ORDER = ['Hypercar', 'LMP2', 'LMP3', 'LMGT3', 'GTE'];
 
 /**
  * NOTE: `id` is persisted as `saved_designs.vehicle_id` (free text, no FK), and an
@@ -43,6 +43,19 @@ export const VEHICLES = [
     canvasHeight: 4096,
     liveryPath: `${LMU_BASE}\\Ferrari 296 LMGT3`,
   },
+  // 2026-season GT3 templates sit ALONGSIDE their 2025 counterparts, never replace
+  // them - cars with no 2026 file are unchanged for 2026 (confirmed by the LMU dev
+  // team). No liveryPath on 2026 entries: the field is unused and the in-game
+  // folder names for the 2026 cars are unconfirmed.
+  {
+    id: 'ferrari_296_evo_lmgt3',
+    name: 'Ferrari 296 LMGT3 EVO (2026)',
+    class: 'LMGT3',
+    uvMap: '/lmutemplates/Ferrari296LMGT3_EVO_2026_UV.webp',
+    classStickers: '/lmutemplates/TOP_Ferrari296LMGT3_EVO_2026.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
   {
     id: 'bmw_m4_lmgt3',
     name: 'BMW M4 LMGT3',
@@ -62,6 +75,15 @@ export const VEHICLES = [
     canvasWidth: 4096,
     canvasHeight: 4096,
     liveryPath: `${LMU_BASE}\\Ford Mustang LMGT3`,
+  },
+  {
+    id: 'ford_mustang_evo_lmgt3',
+    name: 'Ford Mustang LMGT3 EVO (2026)',
+    class: 'LMGT3',
+    uvMap: '/lmutemplates/FordMustangLMGT3_EVO_2026_UV.webp',
+    classStickers: '/lmutemplates/TOP_FordMustangLMGT3_EVO_2026.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
   },
   {
     id: 'lamborghini_huracan_lmgt3',
@@ -113,6 +135,15 @@ export const VEHICLES = [
     canvasHeight: 4096,
     liveryPath: `${LMU_BASE}\\Porsche 911 LMGT3`,
   },
+  {
+    id: 'porsche_911_lmgt3_2026',
+    name: 'Porsche 911 GT3 R (2026)',
+    class: 'LMGT3',
+    uvMap: '/lmutemplates/Porsche911LMGT3R_2026_UV.webp',
+    classStickers: '/lmutemplates/TOP_Porsche911LMGT3R_2026.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
 
   // --- Hypercar (WEC) --------------------------------------------------------
   // Hypercar runs in the WEC only, so these carry no ELMS variant.
@@ -136,6 +167,17 @@ export const VEHICLES = [
     canvasWidth: 4096,
     canvasHeight: 4096,
   },
+  // 2026 update, alongside the 2025 car (same policy as the GT3 2026 entries).
+  {
+    id: 'toyota_gr010_2026_hypercar',
+    name: 'Toyota GR010 Hybrid (2026)',
+    class: 'Hypercar',
+    series: 'WEC',
+    uvMap: '/lmutemplates/ToyotaGR010_2026_UV.webp',
+    classStickers: '/lmutemplates/TOP_ToyotaGR010_2026.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
   {
     id: 'porsche_963_hypercar',
     name: 'Porsche 963',
@@ -153,6 +195,17 @@ export const VEHICLES = [
     series: 'WEC',
     uvMap: '/lmutemplates/CadillacVSeries_2026_UV.webp',
     classStickers: '/lmutemplates/TOP_CadillacVSeries_2026.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
+  // Distinct 2026 EVO variant, not an update of the car above.
+  {
+    id: 'cadillac_vseries_evo_hypercar',
+    name: 'Cadillac V-Series.R EVO (2026)',
+    class: 'Hypercar',
+    series: 'WEC',
+    uvMap: '/lmutemplates/CadillacVSeries_EVO_2026_UV.webp',
+    classStickers: '/lmutemplates/TOP_CadillacVSeries_EVO_2026.webp',
     canvasWidth: 4096,
     canvasHeight: 4096,
   },
@@ -309,6 +362,48 @@ export const VEHICLES = [
     series: 'ELMS',
     uvMap: '/lmutemplates/AdessAD25LMP3_UV.webp',
     classStickers: '/lmutemplates/TOP_AdessAD25LMP3.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
+
+  // --- GTE -------------------------------------------------------------------
+  // A retired, closed class: four cars, one template each, no season or series
+  // variants to disambiguate - so like the GT3s these carry no series badge even
+  // though their plates are taken from the WEC subtree. Listed last in CLASS_ORDER
+  // as the oldest category in the pack.
+  {
+    id: 'aston_martin_vantage_gte',
+    name: 'Aston Martin Vantage GTE',
+    class: 'GTE',
+    uvMap: '/lmutemplates/AstonMartinVantageGTE_UV.webp',
+    classStickers: '/lmutemplates/TOP_AstonMartinVantageGTE.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
+  {
+    id: 'corvette_c8r_gte',
+    name: 'Corvette C8.R GTE',
+    class: 'GTE',
+    uvMap: '/lmutemplates/CorvetteC8RGTE_UV.webp',
+    classStickers: '/lmutemplates/TOP_CorvetteC8RGTE.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
+  {
+    id: 'ferrari_488_gte',
+    name: 'Ferrari 488 GTE',
+    class: 'GTE',
+    uvMap: '/lmutemplates/Ferrari488GTE_UV.webp',
+    classStickers: '/lmutemplates/TOP_Ferrari488GTE.webp',
+    canvasWidth: 4096,
+    canvasHeight: 4096,
+  },
+  {
+    id: 'porsche_911_rsr_gte',
+    name: 'Porsche 911 RSR GTE',
+    class: 'GTE',
+    uvMap: '/lmutemplates/Porsche911RSRGTE_UV.webp',
+    classStickers: '/lmutemplates/TOP_Porsche911RSRGTE.webp',
     canvasWidth: 4096,
     canvasHeight: 4096,
   },

@@ -2,6 +2,32 @@
 
 All notable changes to the LMU Livery Design Tool.
 
+## Unreleased — 16 September 2026
+
+### Added
+
+- **The GTE class, taking the roster from 34 to 38.** All four GTE cars from the
+  official pack: **Aston Martin Vantage GTE**, **Corvette C8.R GTE**, **Ferrari 488
+  GTE** and **Porsche 911 RSR GTE**. GTE is a retired, closed category — one template
+  per car, no season or series variants — so unlike LMP2 these carry no WEC/ELMS badge,
+  and unlike the 2026 cars there is no earlier entry for them to sit alongside. They
+  appear under a new **GTE** option in the Class filter, listed last as the oldest
+  category in the pack.
+- **Five 2026-season cars** extracted in August but not previously released: Ferrari 296
+  LMGT3 EVO, Ford Mustang LMGT3 EVO and Porsche 911 GT3 R in LMGT3, Toyota GR010 Hybrid
+  and Cadillac V-Series.R EVO in Hypercar. Each is a **new entry alongside** its 2025
+  counterpart, so existing designs keep the guide they were drawn on; cars without a new
+  template are unchanged for 2026 (confirmed by the LMU dev team).
+
+### Fixed
+
+- **The Aston Martin Valkyrie's guide and mask are rebuilt.** Its outline now comes from
+  the wireframe reconstruction rather than the bad `region > Region 1` override that was
+  removed earlier: the paintable area goes from 37% of the texture to 69%, the black
+  surround from 57% down to 19%, and its stranded-decal figure from a failing 37% to
+  1.0%. These are the regenerated assets that change could not ship without a Le Mans
+  Ultimate install.
+
 ## Unreleased — 10 August 2026
 
 ### Fixed

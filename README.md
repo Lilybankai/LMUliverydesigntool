@@ -54,8 +54,14 @@ node --max-old-space-size=8192 scripts/psd-extract.mjs \
 # extract everything listed in scripts/templates.manifest.mjs
 node scripts/psd-batch.mjs public/lmutemplates
 
+# ...or just one class / one car, when adding to an existing roster
+node scripts/psd-batch.mjs public/lmutemplates GTE
+
 # body-parts masks for every vehicle (includes the 10 hand-made GT3 cars)
 node --max-old-space-size=28672 scripts/psd-masks.mjs
+
+# takes the same optional filter, so adding a class need not re-derive every mask
+node --max-old-space-size=28672 scripts/psd-masks.mjs public/lmutemplates GTE
 
 # final step: PNG -> lossless WebP, ~55% smaller (74MB -> 34MB)
 node scripts/webp-convert.mjs
@@ -92,9 +98,15 @@ misspells the mask layer as `Maks(Disable for export)`. Matching is therefore do
 patterns, with genuine one-offs declared per file in
 [scripts/templates.manifest.mjs](scripts/templates.manifest.mjs):
 
-- `exclude: ['Car']` — drop a group that would otherwise flood the sticker sheet
-  (Ferrari 499P keeps its red paint there; Lamborghini SC63 has a stray
-  `Class Stickers copy` plate).
+- `exclude: ['Car']` — drop a top-level group that would otherwise flood the sticker
+  sheet (Ferrari 499P keeps its red paint there; Lamborghini SC63 and Ferrari 488 GTE
+  each carry a stray flattened `… copy` of their whole sticker set). It also catches
+  material layers sitting outside the groups `SHADING_RE` knows about, which is what
+  every GTE file needed: the Porsche RSR's unnamed `Group 2` (a matte-plastic block),
+  the Aston Vantage GTE's `Black`/`EXHAUST`, the Ferrari 488 GTE's `DETAILS`/`Skirt`.
+  Left in, these bake solid blobs onto the user's livery in the exported `.tga`;
+  excluded, GTE sticker-sheet coverage drops from 4.6–6.5% to 1.9–3.3%, matching the
+  rest of the pack. Matching is on **top-level** layer names only.
 - `silhouette: 'Car Stickers > Michelin > Michelin'` — name the layer carrying the body
   outline, for files with no `Mask(Disable for export)` plate. The extractor reads that
   layer's **mask** first and falls back to its **painted shape** when the mask is not
@@ -130,6 +142,14 @@ independently (`silhouetteFromWire`). Given a file's authored outline, the extra
 - **keeps it and warns** when the two disagree some other way, since that is a
   different problem and swapping silently would bury it;
 - **falls back to the mesh shape** when the file has no usable outline at all.
+
+Do not reach for `silhouette` just because a layer's coverage looks plausible: a body
+outline and its own surround both land in the same 40–70% band, so the number cannot
+tell them apart. The Ferrari 488 GTE has no `Mask(Disable for export)` and calls that
+plate `Color Fill 1`; at 43% it reads like an outline, but it is the surround, and
+naming it puts the islands exactly where the car is not — whereupon the wireframe
+multiplies into the black and the guide ships with no mesh at all. Left with no
+override it reconstructs correctly from the mesh (63%), as the Valkyrie now does.
 
 `npm run test:silhouette` checks both halves without a PSD: it reads the mesh back out
 of the shipped guides and measures the reconstruction against those cars' authored
