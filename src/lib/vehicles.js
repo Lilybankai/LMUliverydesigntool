@@ -444,5 +444,9 @@ export const BASE_COLOURS = [
   { label: 'Midnight Navy', value: '#0D1B2A' },
   { label: 'Carbon Dark', value: '#1A1A1A' },
   { label: 'Champagne Gold', value: '#C5A028' },
+  // ELMS palette, from the series brand guidelines (see src/lib/elmsContest.js).
+  { label: 'ELMS Orange', value: '#FF5F00' },
+  { label: 'ELMS Navy', value: '#0A0032' },
+  { label: 'ELMS LMP2 Blue', value: '#325F95' },
   { label: 'Customâ€¦', value: 'custom' },
 ];

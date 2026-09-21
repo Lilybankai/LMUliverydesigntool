@@ -14,6 +14,7 @@ import ReplyNotificationDialog from '@/components/livery/ReplyNotificationDialog
 import LiveryEditor from './pages/LiveryEditor';
 import ThankYou from './pages/ThankYou';
 import AdminDashboard from './pages/AdminDashboard';
+import ElmsContest from './pages/ElmsContest';
 
 /**
  * With no Supabase URL/key there is no login that can possibly succeed, so the gate
@@ -79,7 +80,11 @@ function App() {
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
         <Router>
-          <AuthenticatedApp />
+          <Routes>
+            {/* Public. The contest page is shared on socials, so it sits outside the login gate. */}
+            <Route path="/elms-contest" element={<ElmsContest />} />
+            <Route path="*" element={<AuthenticatedApp />} />
+          </Routes>
         </Router>
         <Toaster />
       </QueryClientProvider>

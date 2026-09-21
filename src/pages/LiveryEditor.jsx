@@ -17,6 +17,14 @@ import LiveryCanvas from '@/components/livery/LiveryCanvas';
 import ImageImport from '@/components/livery/ImageImport';
 import ExportAdDialog from '@/components/livery/ExportAdDialog';
 import ApexAioPromo from '@/components/livery/ApexAioPromo';
+import ContestBanner from '@/components/livery/ContestBanner';
+import ContestSidebarCard from '@/components/livery/ContestSidebarCard';
+import ContestAnnounceDialog, { hasSeenContest, markContestSeen } from '@/components/livery/ContestAnnounceDialog';
+import { CONTEST_VEHICLE_ID, isContestOpen, trackContest } from '@/lib/elmsContest';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import InteractiveTutorial from '@/components/livery/InteractiveTutorial';
 import MobileWarningDialog from '@/components/livery/MobileWarningDialog';
 import SaveDesignDialog from '@/components/livery/SaveDesignDialog';
@@ -55,7 +63,15 @@ function resolveImageRefs(layers) {
 }
 
 export default function LiveryEditor() {
-  const [vehicleId, setVehicleId] = useState(VEHICLES[0].id);
+  // `?vehicle=<id>` deep-links straight to a car (the contest page relies on it).
+  // An unknown id falls back to the default rather than breaking the editor.
+  const [vehicleId, setVehicleId] = useState(() => {
+    try {
+      const requested = new URLSearchParams(window.location.search).get('vehicle');
+      if (requested && VEHICLES.some((v) => v.id === requested)) return requested;
+    } catch { /* ignore */ }
+    return VEHICLES[0].id;
+  });
   const [baseColour, setBaseColour] = useState('#1E6FA8');
   const [customColour, setCustomColour] = useState('#FF0000');
   const { state: layers, set: setLayers, commit: commitLayers, undo, redo, canUndo, canRedo, reset: resetLayers } = useHistory([]);
@@ -111,6 +127,24 @@ export default function LiveryEditor() {
   const [myDesignsOpen, setMyDesignsOpen] = useState(false);
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [contestOpen, setContestOpen] = useState(false);
+  // Which surface asked to switch to the contest car while a design was on the
+  // canvas; non-null means the confirm dialog is up.
+  const [contestSwitchPlacement, setContestSwitchPlacement] = useState(null);
+
+  // Announce the contest once, to people who have already been through the
+  // tutorial (so the two never stack). Arriving on the contest car via a
+  // contest link counts as having seen it.
+  useEffect(() => {
+    if (!isContestOpen() || hasSeenContest()) return;
+    let requested = null;
+    try { requested = new URLSearchParams(window.location.search).get('vehicle'); } catch { /* ignore */ }
+    if (requested === CONTEST_VEHICLE_ID) { markContestSeen(); return; }
+    if (requested) return;
+    try { if (!localStorage.getItem('lmu_tutorial_seen')) return; } catch { return; }
+    const t = setTimeout(() => setContestOpen(true), 900);
+    return () => clearTimeout(t);
+  }, []);
   const [hasActiveSub, setHasActiveSub] = useState(false);
 
   // Check subscription status for logged-in users.
@@ -151,6 +185,15 @@ export default function LiveryEditor() {
     setCurrentDesignId(null);
     setCurrentDesignName('');
   }, [resetLayers]);
+
+  // "Design the contest car" from any contest surface. Switching vehicle clears
+  // the canvas, so a non-empty design asks first.
+  const requestContestVehicle = useCallback((placement) => {
+    trackContest('elms_contest_car_requested', { placement });
+    if (vehicleId === CONTEST_VEHICLE_ID) return;
+    if (layers.length === 0) { handleVehicleChange(CONTEST_VEHICLE_ID); return; }
+    setContestSwitchPlacement(placement || 'unknown');
+  }, [vehicleId, layers.length, handleVehicleChange]);
 
   // Returns "<base> N" where N is the next unused index among existing layers
   // whose label starts with the same base name.
@@ -654,6 +697,11 @@ export default function LiveryEditor() {
         onLogout={() => logout(true)}
       />
 
+      <ContestBanner
+        onContestCar={requestContestVehicle}
+        onContestCarAlready={vehicleId === CONTEST_VEHICLE_ID}
+      />
+
       {pendingDraft && (
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 border-b border-accent/40 bg-accent/10 text-sm">
           <div className="flex items-center gap-2 text-foreground">
@@ -770,6 +818,12 @@ export default function LiveryEditor() {
               <Label htmlFor="guides-toggle" className="text-xs text-muted-foreground cursor-pointer">Guide Lines</Label>
             </div>
 
+            <ContestSidebarCard
+              isContestCar={vehicleId === CONTEST_VEHICLE_ID}
+              onContestCar={requestContestVehicle}
+              onImageLayer={handleImageLayer}
+              onBaseColour={setBaseColour}
+            />
             <ApexAioPromo />
           </div>
         </aside>
@@ -885,6 +939,23 @@ export default function LiveryEditor() {
       <ExportAdDialog open={adOpen} onOpenChange={setAdOpen} onDownload={handleDownload} />
       <PaywallDialog open={paywallOpen} onOpenChange={setPaywallOpen} />
       <SuggestionDialog open={suggestOpen} onOpenChange={setSuggestOpen} />
+      <ContestAnnounceDialog open={contestOpen} onOpenChange={setContestOpen} onContestCar={requestContestVehicle} />
+      <AlertDialog open={contestSwitchPlacement !== null} onOpenChange={(v) => { if (!v) setContestSwitchPlacement(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch to the contest car?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Changing vehicle starts a fresh design and clears the canvas. Save your current design first if you want to keep it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep working</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { handleVehicleChange(CONTEST_VEHICLE_ID); setContestSwitchPlacement(null); }}>
+              Switch car
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <InteractiveTutorial
         open={tutorialOpen}
         onClose={() => setTutorialOpen(false)}

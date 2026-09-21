@@ -2,6 +2,25 @@
 
 All notable changes to the LMU Livery Design Tool.
 
+## Unreleased — 21 September 2026
+
+### Added
+
+- **The ELMS 2026 Livery Contest.** A public page at `/elms-contest` (outside the login
+  gate, so it can be shared on socials) with the brief, the prize, the four steps to enter,
+  the contest and ELMS logo rules, the logo pack and brand guidelines to download, the ELMS
+  palette, and a live countdown to the deadline of 6 October 2026, 12:00 CEST. Inside the
+  editor: a dismissable banner under the top bar, a one-time announcement for returning
+  users, and a sidebar card that, once the ELMS Oreca is selected, offers one-click ELMS and
+  LMU logos and the ELMS colours. Everything reads from `src/lib/elmsContest.js` and switches
+  itself off after the deadline. The contest car is the existing **Oreca 07 LMP2 (ELMS)**
+  entry; the PSD in the media pack is byte-identical to the one already extracted.
+- **`?vehicle=<id>` deep links** open the editor on that car. Unknown ids fall back to the
+  default.
+- **ELMS Orange, ELMS Navy and ELMS LMP2 Blue** in the base colour list.
+- **Social card metadata** in `index.html`, currently set to the contest. It is site-wide, so
+  it wants swapping back to generic copy once the contest closes.
+
 ## Unreleased — 16 September 2026
 
 ### Added
