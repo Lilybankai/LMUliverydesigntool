@@ -98,3 +98,22 @@ export function loadImageFile(file, onReady) {
   };
   reader.readAsDataURL(file);
 }
+
+/**
+ * Load an image the app itself serves (a bundled logo, for instance) through the
+ * same pipeline as a user upload, so it lands on the canvas as an embedded,
+ * canvas-safe data URL exactly like a dropped file would.
+ *
+ * The URL's basename is kept as the File name so the SVG detection above still
+ * works even if the server sends a generic content type.
+ */
+export async function loadImageFromUrl(url, onReady) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Could not load ${url} (${res.status})`);
+  const blob = await res.blob();
+  const name = url.split('/').pop() || 'image';
+  const type = blob.type && blob.type.startsWith('image/')
+    ? blob.type
+    : (/\.svg$/i.test(name) ? 'image/svg+xml' : 'image/png');
+  loadImageFile(new File([blob], name, { type }), onReady);
+}
