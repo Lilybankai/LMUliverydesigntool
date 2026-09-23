@@ -467,9 +467,15 @@ export const db = {
       if (!supabase || !eventName) return;
       (async () => {
         try {
-          const { data } = await supabase.auth.getUser();
+          // Read the user id from the LOCAL session, not getUser(). getUser()
+          // hits the network (and takes the auth lock), so when auth is flaky it
+          // hangs/throws and the event is silently dropped — which is why
+          // downloads/visits stopped being recorded while saves (which use the
+          // local session) kept working. getSession() reads from local storage
+          // and never blocks, so events still log. RLS allows a null user_id.
+          const { data } = await supabase.auth.getSession();
           await supabase.from('analytics_events').insert({
-            user_id: data?.user?.id ?? null,
+            user_id: data?.session?.user?.id ?? null,
             event_name: eventName,
             properties: properties || {},
           });
