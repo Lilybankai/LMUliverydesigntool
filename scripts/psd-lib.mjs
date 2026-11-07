@@ -113,6 +113,12 @@ export function applyMask(layerCanvas, layer, W, H) {
  * decals - e.g. Porsche 963 nests a full-size "Color Fill 1" inside its number-plate
  * group, which would otherwise smother the entire transparent sticker sheet.
  * Matched on name AND near-full coverage so genuine large decals are untouched.
+ *
+ * Coverage is measured AFTER the layer mask: a fill layer's raster always spans the
+ * whole document, so judged on its bounds alone every masked "Color Fill" plate - the
+ * usual way a solid number-panel colour is authored - would be dropped as backing.
+ * That is the suspected cause of the ELMS purple panels missing from the Ginetta G61
+ * and ADESS AD25 sheets (unconfirmed: needs the PSDs to re-run).
  */
 const FILL_NAME = /^(color fill|fill layer|colour fill)\s*\d*$/i;
 
@@ -123,11 +129,22 @@ const FILL_NAME = /^(color fill|fill layer|colour fill)\s*\d*$/i;
  */
 export const SURROUND_RE = /^ma[sk]{2}\s*[-(]?\s*disable\s*for\s*export\s*\)?$/i;
 
-function isFullCanvasFill(layer, W, H) {
+function isFullCanvasFill(layer, W, H, masked) {
   if (!FILL_NAME.test((layer.name ?? '').trim())) return false;
   const w = (layer.right ?? 0) - (layer.left ?? 0);
   const h = (layer.bottom ?? 0) - (layer.top ?? 0);
-  return w >= W * 0.98 && h >= H * 0.98;
+  if (w < W * 0.98 || h < H * 0.98) return false;
+  if (!layer.mask?.canvas) return true;
+  // Sampled every 4th pixel each way: plenty to tell ~100% from a plate-sized hole.
+  const d = masked.getContext('2d').getImageData(0, 0, W, H).data;
+  let on = 0, n = 0;
+  for (let y = 0; y < H; y += 4) {
+    for (let x = 0; x < W; x += 4) {
+      n++;
+      if (d[(y * W + x) * 4 + 3] > 0) on++;
+    }
+  }
+  return on / n >= 0.9;
 }
 
 /**
@@ -149,11 +166,6 @@ export function composite(ctx, nodes, W, H, { force = false, warnings = [] } = {
     }
     if (!layer.canvas) continue;
 
-    if (isFullCanvasFill(layer, W, H)) {
-      warnings.push(`skipped full-canvas fill: "${layer.name}"`);
-      continue;
-    }
-
     const w = (layer.right ?? 0) - (layer.left ?? 0);
     const h = (layer.bottom ?? 0) - (layer.top ?? 0);
     if (w <= 0 || h <= 0) continue;
@@ -162,6 +174,11 @@ export function composite(ctx, nodes, W, H, { force = false, warnings = [] } = {
     let plate = createCanvas(W, H);
     plate.getContext('2d').drawImage(layer.canvas, layer.left ?? 0, layer.top ?? 0);
     plate = applyMask(plate, layer, W, H);
+
+    if (isFullCanvasFill(layer, W, H, plate)) {
+      warnings.push(`skipped full-canvas fill: "${layer.name}"`);
+      continue;
+    }
 
     ctx.save();
     ctx.globalAlpha = layer.opacity ?? 1;

@@ -2,6 +2,37 @@
 
 All notable changes to the LMU Livery Design Tool.
 
+## Unreleased — 7 November 2026
+
+### Fixed
+
+- **Ferrari 499P: the nose HYPERCAR tag was stamped twice.** The sticker sheet carried a
+  second copy 28px below the first, so the nose read "HYPERR / CARR" with a doubled
+  border, and that was baked into every exported `.tga`. Removed from both the sticker
+  sheet and the UV guide, keeping the guide's mesh lines.
+- **ADESS AD25 LMP3: the purple ELMS number panels were missing.** Restored on both sides
+  and on the nose. The side panels follow the plate-shaped holes the UV guide still
+  carried; the nose panel uses the Duqueine D09's layout. The body mask had the same holes,
+  so the base colour skipped those panels; they are filled now.
+- Both repairs are in `scripts/patch-sheets.mjs`. It is idempotent, and before writing it
+  checks that nothing outside the repaired areas changed.
+- **Extractor:** a masked `Color Fill` layer was dropped as "full-canvas backing" because
+  of its bounding box, which always covers the whole document, even when its mask cuts
+  it down to a small plate. Coverage is now measured after the mask. This is the suspected
+  cause of the missing LMP3 plates, but it can only be confirmed by re-running the
+  extraction on the PSDs.
+
+### Known, not yet fixed
+
+- **Ginetta G61 Evo LMP3: purple ELMS panels still missing.** Unlike the ADESS, nothing in
+  the shipped assets records where they go: no white strip and no hole in the guide. It
+  needs `node scripts/psd-batch.mjs public/lmutemplates ginetta` (then `psd-masks.mjs`
+  and `webp-convert.mjs`) on a machine with the game installed.
+- **BMW M4 LMGT3: carbon parts are not marked.** Its UV guide predates the extraction
+  pipeline and was made by hand, all white, so unlike the other GT3s it does not shade
+  the carbon parts, and the base colour covers the whole car. Fixing this needs the
+  BMW PSD's carbon layer.
+
 ## Unreleased — 21 September 2026
 
 ### Added
