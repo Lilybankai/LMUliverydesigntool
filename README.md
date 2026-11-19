@@ -173,8 +173,8 @@ Known limitations:
 ### Repairs without a PSD
 
 `scripts/patch-sheets.mjs` fixes the defects that can be repaired exactly from the
-shipped assets: the Ferrari 499P's doubled nose tag, and the ADESS AD25's missing ELMS
-plates. It is idempotent, and it writes nothing until it has checked that every pixel
+shipped assets: the Ferrari 499P's doubled nose tag, the ADESS AD25's missing ELMS
+plates, and the Genesis GMR-001's missing roof-scoop panels. It is idempotent, and it writes nothing until it has checked that every pixel
 outside the repaired areas is unchanged. If you re-extract one of those cars from its
 PSD, re-run the script; it should report `already clean`.
 
