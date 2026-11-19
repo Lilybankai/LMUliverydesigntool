@@ -10,6 +10,7 @@
  * of the weight.
  *
  * Usage: node --max-old-space-size=28672 scripts/psd-masks.mjs [outDir] [only]
+ *   Set LMU_TEMPLATES to read the PSDs from somewhere other than the game install.
  *   `only` filters by vehicle id substring or class, exactly as psd-batch.mjs does,
  *   so adding one class does not mean re-deriving every shipped mask.
  */
@@ -19,7 +20,8 @@ import { createCanvas } from '@napi-rs/canvas';
 import { loadPsd, buildSilhouette } from './psd-lib.mjs';
 import { TEMPLATES } from './templates.manifest.mjs';
 
-const DIR =
+// LMU_TEMPLATES overrides the game folder, for working from copies of the PSDs.
+const DIR = process.env.LMU_TEMPLATES ||
   'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Le Mans Ultimate\\Support\\LiveryTemplates';
 const OUT = process.argv[2] || join(process.cwd(), 'public', 'lmutemplates');
 const ONLY = process.argv[3];
