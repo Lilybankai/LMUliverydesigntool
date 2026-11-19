@@ -6,12 +6,18 @@ All notable changes to the LMU Livery Design Tool.
 
 ### Fixed
 
-- **Genesis GMR-001: the roof-scoop panel was missing from the template.** On both flanks,
-  the rounded panel directly above the DHL board had been left out of the body outline. The
-  guide drew it solid black and the base colour skipped it, so it looked unpaintable. It is
-  a real panel, though: colour placed there shows on the car in game. It is now filled in
-  both the UV guide and the body mask. The sticker sheet was already empty there and is
-  unchanged. The repair is in `scripts/patch-sheets.mjs`.
+- **Reverted the Genesis GMR-001 "roof-scoop" fill from 19 November.** The two holes it
+  filled, above each DHL board, are the side number-plate positions. The game draws the
+  number there, so they are black on purpose. They are back to how they were.
+
+### Known, not yet fixed
+
+- **Genesis GMR-001: the air-intake roof scoop has no template.** It sits in the black
+  gap between the two islands above the top-flank number plate. The guide, mask and
+  sticker sheet are all empty there, so its outline cannot be recovered from the shipped
+  assets. This file's body outline comes from a hand-picked layer (`Car Stickers >
+  Michelin > Michelin`) that leaves the scoop out. Re-extracting with the wireframe
+  reconstruction should recover it, but that needs the PSD.
 
 ## Unreleased — 7 November 2026
 
