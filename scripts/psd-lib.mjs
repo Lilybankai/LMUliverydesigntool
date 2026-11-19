@@ -208,6 +208,118 @@ function maskPlate(layer, W, H) {
 }
 
 /**
+ * Mesh regions smaller than this share of the canvas are not added back by
+ * `addMissedIslands`: below it a "component" is as likely to be a stray tick of line
+ * work as a panel. 0.05% is ~8k px at 4096 - the Genesis roof scoop is ~280k.
+ */
+const MIN_ISLAND = 0.0005;
+
+/** Share of a missed region the material selectors must cover for it to be added. */
+const MATERIAL_SHARE = 0.5;
+
+/**
+ * Union of the masks in the file's "Region" group (white = that material applies), or
+ * null when the file has none. Unmasked layers in the group (a plain "Color Fill") say
+ * nothing about where anything is and are ignored.
+ */
+function materialSelectors(psd, W, H) {
+  const region = findGroup(psd.children ?? [], 'Region');
+  if (!region?.children?.length) return null;
+  const out = new Uint8Array(W * H);
+  let any = false;
+  for (const layer of region.children) {
+    const mp = maskPlate(layer, W, H);
+    if (!mp) continue;
+    any = true;
+    for (let i = 0, p = 0; i < out.length; i++, p += 4) {
+      if (mp.data[p] * 0.299 + mp.data[p + 1] * 0.587 + mp.data[p + 2] * 0.114 > 127) out[i] = 1;
+    }
+  }
+  return any ? out : null;
+}
+
+/**
+ * Opening radius, in 4096-canvas pixels, that strips the thin slivers where the
+ * wireframe reconstruction runs a pixel or two past an authored edge, so only real
+ * panels survive into `addMissedIslands`.
+ */
+const MISSED_OPEN_RADIUS = 6;
+
+/**
+ * Add mesh panels the authored outline left out entirely.
+ *
+ * An outline can sit within MAX_DROPPED of the mesh overall and still omit a whole
+ * part: the Genesis GMR-001's hand-picked outline drops its air-intake roof scoop, so
+ * the guide painted it black and the editor showed no template for it - though colour
+ * placed there shows on the car in game.
+ *
+ * Candidates are mesh pixels outside the outline AND outside every hole the outline
+ * encloses: a cut-out inside a panel (a number-plate box, a vent) is the author's
+ * choice and stays as drawn, while a missing part borders the surround. The candidates
+ * are then opened by MISSED_OPEN_RADIUS to drop edge slivers.
+ *
+ * Being mesh is not enough on its own: glass and interior are UV islands too, and on
+ * the Genesis the outline also (rightly) leaves out several cockpit parts. So a region
+ * is only added when the file's own material selectors - the masks in its "Region"
+ * group (Carbon Fibre / Chrome / Car Wrap / ...) - mark at least MATERIAL_SHARE of it as
+ * bodywork. The scoop sits inside Genesis's "Carbon Fibre" selector; the cockpit parts
+ * sit in none. A file with no Region group gets nothing added.
+ */
+function addMissedIslands(psd, authored, wire, W, H) {
+  const material = materialSelectors(psd, W, H);
+  if (!material) return { canvas: authored.canvas, islands: 0, share: 0 };
+
+  const N = W * H;
+  const enclosed = fillEnclosed(authored.inside, W, H);
+  const cand = new Uint8Array(N);
+  for (let i = 0; i < N; i++) cand[i] = wire.inside[i] && !enclosed[i] ? 1 : 0;
+
+  const r = Math.max(1, Math.round((MISSED_OPEN_RADIUS * Math.max(W, H)) / 4096));
+  const opened = boxMorph(boxMorph(cand, W, H, r, 'erode'), W, H, r, 'dilate');
+  for (let i = 0; i < N; i++) opened[i] &= cand[i];
+
+  const label = new Int32Array(N);
+  const queue = new Int32Array(N);
+  const minArea = MIN_ISLAND * N;
+  const keep = new Set();
+  let added = 0;
+  let next = 0;
+  for (let start = 0; start < N; start++) {
+    if (!opened[start] || label[start]) continue;
+    const id = ++next;
+    let head = 0;
+    let tail = 0;
+    label[start] = id;
+    queue[tail++] = start;
+    while (head < tail) {
+      const i = queue[head++];
+      const x = i % W;
+      for (const j of [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, i - W, i + W]) {
+        if (j < 0 || j >= N || label[j] || !opened[j]) continue;
+        label[j] = id;
+        queue[tail++] = j;
+      }
+    }
+    let mat = 0;
+    for (let k = 0; k < tail; k++) if (material[queue[k]]) mat++;
+    if (tail >= minArea && mat / tail >= MATERIAL_SHARE) {
+      keep.add(id);
+      added += tail;
+    }
+  }
+  if (!keep.size) return { canvas: authored.canvas, islands: 0, share: 0 };
+
+  const ctx = authored.canvas.getContext('2d');
+  const img = ctx.getImageData(0, 0, W, H);
+  for (let i = 0, p = 0; i < N; i++, p += 4) {
+    if (!keep.has(label[i])) continue;
+    img.data[p] = img.data[p + 1] = img.data[p + 2] = img.data[p + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return { canvas: authored.canvas, islands: keep.size, share: added / N };
+}
+
+/**
  * Build the body-part silhouette: alpha 255 inside the UV islands, 0 outside.
  *
  * The official PSDs are inconsistent about which layers they carry, so this tries
@@ -507,7 +619,13 @@ export function buildSilhouette(psd, W, H, explicitPath) {
 
     const dropped = 1 - overlap(authored.inside, wire.inside);
     if (dropped <= MAX_DROPPED) {
-      return { canvas: authored.canvas, source: `${authored.source}, mesh -${(dropped * 100).toFixed(0)}%` };
+      const base = `${authored.source}, mesh -${(dropped * 100).toFixed(0)}%`;
+      const fill = addMissedIslands(psd, authored, wire, W, H);
+      if (!fill.islands) return { canvas: authored.canvas, source: base };
+      return {
+        canvas: fill.canvas,
+        source: `${base}, +${fill.islands} missed mesh panel(s) (${(fill.share * 100).toFixed(1)}%)`,
+      };
     }
     // Only overrule an outline the mesh *contains*: a shape that sits somewhere else
     // entirely is a different problem, and silently swapping it would hide it.

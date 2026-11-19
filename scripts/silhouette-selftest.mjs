@@ -109,15 +109,18 @@ const ISLANDS = [
   [300, 60, 180, 380],
 ];
 
+/** A small third island, ~8% of the mesh: under MAX_DROPPED when it alone is missed. */
+const SMALL = [40, 380, 120, 100];
+
 /** A wire render: mesh lines on black, drawn over the islands. */
-function wireLayer() {
+function wireLayer(islands = ISLANDS) {
   const c = createCanvas(N, N);
   const ctx = c.getContext('2d');
   ctx.fillStyle = '#000000';
   ctx.fillRect(0, 0, N, N);
   ctx.strokeStyle = '#8fbcd4';
   ctx.lineWidth = 1;
-  for (const [x, y, w, h] of ISLANDS) {
+  for (const [x, y, w, h] of islands) {
     ctx.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1);
     for (let gx = x + 20; gx < x + w; gx += 20) {
       ctx.beginPath();
@@ -139,19 +142,42 @@ function wireLayer() {
  * A "Mask(Disable for export)" plate: its Photoshop mask is white over the surround
  * and black over the body, which is why buildSilhouette inverts it.
  */
-function surroundPlate(rects) {
+function surroundPlate(rects, holes = []) {
   const m = createCanvas(N, N);
   const ctx = m.getContext('2d');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, N, N);
   ctx.fillStyle = '#000000';
   for (const [x, y, w, h] of rects) ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#ffffff';
+  for (const [x, y, w, h] of holes) ctx.fillRect(x, y, w, h);
   return {
     name: 'Mask(Disable for export)',
     canvas: createCanvas(N, N),
     left: 0,
     top: 0,
     mask: { canvas: m, left: 0, top: 0, right: N, bottom: N, defaultColor: 255 },
+  };
+}
+
+/** A "Region" group whose one material selector (mask white = applies) covers `rects`. */
+function regionGroup(rects) {
+  const m = createCanvas(N, N);
+  const ctx = m.getContext('2d');
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, N, N);
+  ctx.fillStyle = '#ffffff';
+  for (const [x, y, w, h] of rects) ctx.fillRect(x, y, w, h);
+  return {
+    name: 'Region',
+    hidden: true,
+    children: [{
+      name: 'Carbon Fibre',
+      canvas: createCanvas(N, N),
+      left: 0,
+      top: 0,
+      mask: { canvas: m, left: 0, top: 0, right: N, bottom: N, defaultColor: 0 },
+    }],
   };
 }
 
@@ -172,6 +198,28 @@ const CASES = [
     expect: (r) => /^Mask\(Disable for export\)/.test(r.source) && !!r.warning,
   },
   {
+    name: 'missed island a material selector covers is added',
+    wire: [...ISLANDS, SMALL],
+    plate: ISLANDS,
+    region: [SMALL],
+    expect: (r) => /^Mask\(Disable for export\)/.test(r.source) && r.source.includes('+1 missed') && !r.warning,
+  },
+  {
+    // Glass and interior are mesh too; without a selector saying "bodywork", leave it.
+    name: 'missed island no selector covers is left out',
+    wire: [...ISLANDS, SMALL],
+    plate: ISLANDS,
+    region: [ISLANDS[0]],
+    expect: (r) => /^Mask\(Disable for export\)/.test(r.source) && !r.source.includes('missed') && !r.warning,
+  },
+  {
+    // A number-plate box cut out of a panel is deliberate (Genesis GMR-001 has two).
+    name: 'a cut-out inside a panel stays cut out',
+    plate: ISLANDS,
+    holes: [[80, 100, 90, 60]],
+    expect: (r) => /^Mask\(Disable for export\)/.test(r.source) && !r.source.includes('missed') && !r.warning,
+  },
+  {
     name: 'no outline at all falls back to the mesh',
     plate: null,
     expect: (r) => r.source?.startsWith('wireframe') && r.source.includes('no authored outline'),
@@ -180,7 +228,9 @@ const CASES = [
 
 console.log('');
 for (const c of CASES) {
-  const children = c.plate ? [surroundPlate(c.plate), wireLayer()] : [wireLayer()];
+  const wire = wireLayer(c.wire);
+  const children = c.plate ? [surroundPlate(c.plate, c.holes), wire] : [wire];
+  if (c.region) children.unshift(regionGroup(c.region));
   const r = buildSilhouette({ children, width: N, height: N }, N, N);
   const ok = !!r && c.expect(r);
   if (!ok) failures++;

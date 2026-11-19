@@ -6,12 +6,35 @@ All notable changes to the LMU Livery Design Tool.
 
 ### Fixed
 
-- **Genesis GMR-001: the roof-scoop panel was missing from the template.** On both flanks,
-  the rounded panel directly above the DHL board had been left out of the body outline. The
-  guide drew it solid black and the base colour skipped it, so it looked unpaintable. It is
-  a real panel, though: colour placed there shows on the car in game. It is now filled in
-  both the UV guide and the body mask. The sticker sheet was already empty there and is
-  unchanged. The repair is in `scripts/patch-sheets.mjs`.
+- **Reverted the Genesis GMR-001 "roof-scoop" fill from 19 November.** The two holes it
+  filled, above each DHL board, are the side number-plate positions. The game draws the
+  number there, so they are black on purpose. They are back to how they were.
+
+- **Genesis GMR-001: the air-intake roof scoop now has a template.** It is the island in
+  the gap above the top-flank number plate. This file's body outline comes from a
+  hand-picked layer (`Car Stickers > Michelin > Michelin`) that left the scoop out, so the
+  guide drew it black and the editor showed nothing to paint. It was re-extracted from the
+  official PSD, and the guide and mask now include it with its mesh. Nothing else on the
+  car moved: the mask only gained pixels, and the guide changed only inside the scoop.
+- **Extractor: mesh panels an authored outline misses entirely are added back.** When
+  `buildSilhouette` keeps an authored outline, any wireframe region outside it is added,
+  but only if all of these hold:
+  - it isn't inside a hole the outline encloses, so plate boxes and vents stay cut out;
+  - it is larger than 0.05% of the sheet;
+  - at least half of it is marked as bodywork by the file's own `Region` material
+    selectors.
+
+  The last rule matters on the Genesis: four cockpit parts are mesh too but sit in no
+  selector (likely glass or interior), and they stay out. `test:silhouette` covers both
+  the add and the leave-out cases, plus a cut-out panel.
+- `psd-masks.mjs` reads `LMU_TEMPLATES` to find the PSDs outside the game install.
+
+### Not included
+
+- Re-extracting the Genesis also changes its **sticker sheet**. Since the masked-fill fix
+  of 7 November, the official red WEC number plates (nose, and the boxes above and below
+  the sheet) are no longer dropped. That would bake red plates into every exported Genesis
+  livery, so the shipped sticker sheet is unchanged here pending a decision.
 
 ## Unreleased — 7 November 2026
 
