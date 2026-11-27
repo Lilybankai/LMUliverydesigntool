@@ -131,18 +131,13 @@ export function createLayer(shapeType, canvasWidth, canvasHeight) {
   };
 }
 
-// Mirror an array of canvas-space points around the layer's centre, respecting
-// flipX/flipY. Also reorders the array so that the logical role of each index
-// (TL/TR/BR/BL for corners or Top/Right/Bottom/Left for edges) stays consistent
-// with what's rendered after a flip.
+// Reorder a flip-mirrored [TL,TR,BR,BL] corner / [Top,Right,Bottom,Left] edge
+// array so the logical role of each index stays consistent with what's rendered
+// after a flip. The mirroring itself happens in layer-local space inside
+// layerLocalToCanvas, exactly like the renderer's ctx.scale(-1, 1).
 function applyFlipToPoints(pts, layer, isEdges) {
   if (!layer.flipX && !layer.flipY) return pts;
-  const cx = layer.x + layer.width / 2;
-  const cy = layer.y + layer.height / 2;
-  let out = pts.map(p => ({
-    x: layer.flipX ? cx - (p.x - cx) : p.x,
-    y: layer.flipY ? cy - (p.y - cy) : p.y,
-  }));
+  let out = pts;
   if (layer.flipX) {
     // corners [TL,TR,BR,BL] -> swap TL<->TR, BL<->BR
     // edges   [Top,Right,Bottom,Left] -> swap Right<->Left
@@ -158,6 +153,29 @@ function applyFlipToPoints(pts, layer, isEdges) {
       : [out[3], out[2], out[1], out[0]];
   }
   return out;
+}
+
+// Map layer-local points (centred at 0,0) to canvas space using the SAME
+// transform order the renderer uses: translate(centre) -> rotate -> flip -> skew.
+// Flipping in local space (before rotation) matters: mirroring in world space
+// instead would turn a rotation of +θ into -θ on any single flipped axis.
+function layerLocalToCanvas(layer, localPts) {
+  const cx = layer.x + layer.width / 2;
+  const cy = layer.y + layer.height / 2;
+  const rad = (layer.rotation * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const skewTan = Math.tan(((layer.skewX || 0) * Math.PI) / 180);
+  const fx = layer.flipX ? -1 : 1;
+  const fy = layer.flipY ? -1 : 1;
+  return localPts.map(({ x, y }) => {
+    const sx = (x + y * skewTan) * fx;
+    const sy = y * fy;
+    return {
+      x: cx + sx * cos - sy * sin,
+      y: cy + sx * sin + sy * cos,
+    };
+  });
 }
 
 // Inverse of the index REORDERING that applyFlipToPoints performs. Given the
@@ -179,32 +197,23 @@ export function storedHandleIndex(layer, visualIdx, isEdges) {
 
 // Returns the 4 actual canvas points [TL, TR, BR, BL] for a layer (after rotation+skew+distort+flip)
 export function getLayerCornerPoints(layer) {
+  return applyFlipToPoints(getShapeCornerPoints(layer), layer, false);
+}
+
+// The layer's stored corners [TL, TR, BR, BL] in canvas space, mirrored but NOT
+// reordered — index 0 is always the shape's own top-left, wherever the flip
+// puts it. Use this to draw geometry (so asymmetric shapes actually mirror);
+// use getLayerCornerPoints for on-screen handles.
+function getShapeCornerPoints(layer) {
   const corners = layer.corners || DEFAULT_CORNERS;
   const hw = layer.width / 2;
   const hh = layer.height / 2;
-  const cx = layer.x + hw;
-  const cy = layer.y + hh;
-  const rad = (layer.rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const skewTan = Math.tan(((layer.skewX || 0) * Math.PI) / 180);
-
-  const localPts = [
+  return layerLocalToCanvas(layer, [
     { x: -hw + corners[0].dx, y: -hh + corners[0].dy },
     { x:  hw + corners[1].dx, y: -hh + corners[1].dy },
     { x:  hw + corners[2].dx, y:  hh + corners[2].dy },
     { x: -hw + corners[3].dx, y:  hh + corners[3].dy },
-  ];
-
-  const pts = localPts.map(({ x, y }) => {
-    const sx = x + y * skewTan;
-    const sy = y;
-    return {
-      x: cx + sx * cos - sy * sin,
-      y: cy + sx * sin + sy * cos,
-    };
-  });
-  return applyFlipToPoints(pts, layer, false);
+  ]);
 }
 
 // Returns the 4 edge-midpoint handle positions in canvas space [Top, Right, Bottom, Left].
@@ -213,13 +222,6 @@ export function getLayerEdgePoints(layer) {
   const edges = layer.edges || DEFAULT_EDGES;
   const hw = layer.width / 2;
   const hh = layer.height / 2;
-  const cx = layer.x + hw;
-  const cy = layer.y + hh;
-  const rad = (layer.rotation * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const skewTan = Math.tan(((layer.skewX || 0) * Math.PI) / 180);
-
   // Top, Right, Bottom, Left midpoints in local coords + edge offsets
   const localPts = [
     { x:   0 + edges[0].dx, y: -hh + edges[0].dy }, // Top
@@ -227,16 +229,7 @@ export function getLayerEdgePoints(layer) {
     { x:   0 + edges[2].dx, y:  hh + edges[2].dy }, // Bottom
     { x: -hw + edges[3].dx, y:   0 + edges[3].dy }, // Left
   ];
-
-  const pts = localPts.map(({ x, y }) => {
-    const sx = x + y * skewTan;
-    const sy = y;
-    return {
-      x: cx + sx * cos - sy * sin,
-      y: cy + sx * sin + sy * cos,
-    };
-  });
-  return applyFlipToPoints(pts, layer, true);
+  return applyFlipToPoints(layerLocalToCanvas(layer, localPts), layer, true);
 }
 
 // Quadratic Bezier interpolation at parameter t between two corners
@@ -314,12 +307,18 @@ function drawWarped(ctx, layer, fn, centered = true) {
   off.width = Math.ceil(w);
   off.height = Math.ceil(h);
   const oc = off.getContext('2d');
-  if (centered) oc.translate(hw, hh);
+  // Bake the mirror into the source content. The destination points below are
+  // in on-screen (flip-reordered) order, so without this the warp maps the
+  // image's own top-left onto the on-screen top-left and silently un-mirrors it
+  // the moment any corner or edge is moved.
+  oc.translate(hw, hh);
+  oc.scale(layer.flipX ? -1 : 1, layer.flipY ? -1 : 1);
+  if (!centered) oc.translate(-hw, -hh);
   fn(oc, hw, hh, w, h);
   oc.setTransform(1, 0, 0, 1, 0, 0);
 
   // Get the 4 destination points in canvas space [TL, TR, BR, BL]
-  // (already includes flip mirroring via getLayerCornerPoints/getLayerEdgePoints)
+  // (flip-mirrored and reordered into on-screen order by getLayerCornerPoints/getLayerEdgePoints)
   const pts = getLayerCornerPoints(layer);
   const edgePts = getLayerEdgePoints(layer);
   const edges = layer.edges || DEFAULT_EDGES;
@@ -1424,8 +1423,9 @@ export function drawShape(ctx, layer) {
   const cy = layer.y + hh;
 
   if (hasCornerDistort || ['triangle', 'right_triangle', 'chevron', 'diagonal_band', 'diamond', 'arrow', 'parallelogram', 'trapezoid'].includes(layer.type)) {
-    // pts already include flip mirroring from getLayerCornerPoints
-    const pts = getLayerCornerPoints(layer);
+    // Mirrored shape corners in the shape's own TL/TR/BR/BL order, so the
+    // asymmetric paths below (right triangle, arrow, chevron…) flip correctly.
+    const pts = getShapeCornerPoints(layer);
     // For canvas-space paths, build the gradient in canvas space using the layer's bounding box
     ctx.fillStyle = fillStyleFor(ctx, layer, layer.colour, [layer.x, layer.y, layer.x + layer.width, layer.y + layer.height]);
 
