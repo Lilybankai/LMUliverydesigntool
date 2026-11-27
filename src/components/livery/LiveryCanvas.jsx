@@ -609,19 +609,19 @@ export default function LiveryCanvas({ vehicle, baseColour, baseOpacity = 1, lay
         return;
       }
 
-      // Convert world delta -> layer-local delta. The flip mirrors handle
-      // positions in world space (see applyFlipToPoints), so un-mirror the world
-      // delta on any flipped axis BEFORE inverse-rotating — otherwise dragging a
-      // handle moves it in the opposite direction once the shape is flipped.
+      // Convert world delta -> layer-local delta. The flip is applied in layer
+      // space, inside the rotation (see layerLocalToCanvas), so inverse-rotate
+      // the world delta FIRST, then un-mirror it on any flipped axis — otherwise
+      // dragging a handle moves it in the wrong direction once flipped.
       const rad = -(layer.rotation * Math.PI) / 180;
       const cos = Math.cos(rad);
       const sin = Math.sin(rad);
       const sx = layer.flipX ? -1 : 1;
       const sy = layer.flipY ? -1 : 1;
-      const wdx = (x - cornerDrag.startX) * sx;
-      const wdy = (y - cornerDrag.startY) * sy;
-      const ldx = wdx * cos - wdy * sin;
-      const ldy = wdx * sin + wdy * cos;
+      const wdx = x - cornerDrag.startX;
+      const wdy = y - cornerDrag.startY;
+      const ldx = (wdx * cos - wdy * sin) * sx;
+      const ldy = (wdx * sin + wdy * cos) * sy;
 
       // The hit index is a slot in the flip-reordered handle array; map it back
       // to the entry in the stored (un-flipped) corners/edges array before

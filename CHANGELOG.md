@@ -6,6 +6,15 @@ All notable changes to the LMU Livery Design Tool.
 
 ### Fixed
 
+- **Mirrored layers stay mirrored when you deform or wave them.** Once any corner or
+  edge handle had moved, a flipped image, pattern or texture was drawn unflipped. The
+  warp now keeps the mirror.
+- **Handles on a rotated, flipped layer now sit on the layer.** With one axis flipped,
+  the corner and edge handles drew as if the rotation were reversed (+30° showed at
+  −30°). They now match what is drawn, and dragging one still moves only that handle.
+- **Right triangle, arrow and chevron now flip.** Flip X/Y did nothing to these shapes
+  until an edge was bent.
+
 - **Reverted the Genesis GMR-001 "roof-scoop" fill from 19 November.** The two holes it
   filled, above each DHL board, are the side number-plate positions. The game draws the
   number there, so they are black on purpose. They are back to how they were.
